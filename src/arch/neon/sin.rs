@@ -62,7 +62,6 @@ use crate::arch::consts::sin::{
 ///
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
-#[allow(dead_code)]
 pub(crate) unsafe fn vsin_f32(x: float32x4_t) -> float32x4_t {
     // Process as two 2-lane f64 operations for precision
     // Split input into low and high halves, convert to f64
@@ -226,7 +225,6 @@ unsafe fn cosdf_kernel(x: float64x2_t) -> float64x2_t {
 ///
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
-#[allow(dead_code)]
 pub(crate) unsafe fn vsin_f64(x: float64x2_t) -> float64x2_t {
     let frac_2_pi = vdupq_n_f64(FRAC_2_PI_64);
     let pio2_1 = vdupq_n_f64(PIO2_1_64);
@@ -399,31 +397,7 @@ mod tests {
         out
     }
 
-    /// Compute ULP difference between two f32 values
-    fn ulp_diff_f32(a: f32, b: f32) -> u32 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u32::MAX;
-        }
-        let a_bits = a.to_bits() as i32;
-        let b_bits = b.to_bits() as i32;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
-
-    /// Compute ULP difference between two f64 values
-    fn ulp_diff_f64(a: f64, b: f64) -> u64 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u64::MAX;
-        }
-        let a_bits = a.to_bits() as i64;
-        let b_bits = b.to_bits() as i64;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
+    use crate::test_utils::{ulp_diff_f32, ulp_diff_f64};
 
     // =========================================================================
     // f32 Tests

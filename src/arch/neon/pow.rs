@@ -62,8 +62,8 @@
 use std::arch::aarch64::*;
 
 use crate::arch::consts::exp::{
-    LN2_HI_64 as EXP_LN2_HI, LN2_INV_64, LN2_LO_64 as EXP_LN2_LO, OVERFLOW_THRESH_64,
-    P1_64, P2_64, P3_64, P4_64, P5_64, UNDERFLOW_THRESH_64,
+    LN2_HI_64 as EXP_LN2_HI, LN2_INV_64, LN2_LO_64 as EXP_LN2_LO, OVERFLOW_THRESH_64, P1_64, P2_64,
+    P3_64, P4_64, P5_64, UNDERFLOW_THRESH_64,
 };
 use crate::arch::consts::ln::{
     LG1_64, LG2_64, LG3_64, LG4_64, LG5_64, LG6_64, LG7_64, LN2_HI_64, LN2_LO_64, SQRT2_64,
@@ -88,7 +88,6 @@ use crate::arch::consts::ln::{
 ///
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
-#[allow(dead_code)]
 pub(crate) unsafe fn vpow_f32(x: float32x4_t, y: float32x4_t) -> float32x4_t {
     // Split 4-lane f32 into two 2-lane f64 halves
     let x_lo = vcvt_f64_f32(vget_low_f32(x));
@@ -124,7 +123,6 @@ pub(crate) unsafe fn vpow_f32(x: float32x4_t, y: float32x4_t) -> float32x4_t {
 ///
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
-#[allow(dead_code)]
 pub(crate) unsafe fn vpow_f64(x: float64x2_t, y: float64x2_t) -> float64x2_t {
     pow_core_f64(x, y)
 }
@@ -337,10 +335,7 @@ unsafe fn exp_compensated(ehi: float64x2_t, elo: float64x2_t) -> float64x2_t {
     let c = vsubq_f64(r, vmulq_f64(r2, p));
 
     let rc = vmulq_f64(r, c);
-    let exp_r = vsubq_f64(
-        one,
-        vsubq_f64(vdivq_f64(rc, vsubq_f64(c, two)), r),
-    );
+    let exp_r = vsubq_f64(one, vsubq_f64(vdivq_f64(rc, vsubq_f64(c, two)), r));
 
     // =================================================================
     // Reconstruct: exp(ehi+elo) = 2^k · exp(r+elo)
@@ -625,19 +620,13 @@ mod tests {
     #[test]
     fn pow_f32_fractional_exponent() {
         let r = unsafe { pow_scalar_32(4.0, 0.5) };
-        assert!(
-            (r - 2.0).abs() < TOL_32,
-            "pow(4, 0.5) = {r}, expected 2.0"
-        );
+        assert!((r - 2.0).abs() < TOL_32, "pow(4, 0.5) = {r}, expected 2.0");
     }
 
     #[test]
     fn pow_f32_negative_exponent() {
         let r = unsafe { pow_scalar_32(2.0, -1.0) };
-        assert!(
-            (r - 0.5).abs() < TOL_32,
-            "pow(2, -1) = {r}, expected 0.5"
-        );
+        assert!((r - 0.5).abs() < TOL_32, "pow(2, -1) = {r}, expected 0.5");
     }
 
     // ---- Negative bases with integer exponents -----------------------------
@@ -645,10 +634,7 @@ mod tests {
     #[test]
     fn pow_f32_neg_base_even_int() {
         let r = unsafe { pow_scalar_32(-2.0, 2.0) };
-        assert!(
-            (r - 4.0).abs() < TOL_32,
-            "pow(-2, 2) = {r}, expected 4.0"
-        );
+        assert!((r - 4.0).abs() < TOL_32, "pow(-2, 2) = {r}, expected 4.0");
     }
 
     #[test]
@@ -685,7 +671,10 @@ mod tests {
     #[test]
     fn pow_f32_zero_to_negative_is_inf() {
         let r = unsafe { pow_scalar_32(0.0, -2.0) };
-        assert!(r.is_infinite() && r.is_sign_positive(), "pow(0, -2) = {r}, expected +∞");
+        assert!(
+            r.is_infinite() && r.is_sign_positive(),
+            "pow(0, -2) = {r}, expected +∞"
+        );
     }
 
     #[test]
@@ -918,10 +907,7 @@ mod tests {
     #[test]
     fn pow_f64_fractional_exponent() {
         let r = unsafe { pow_scalar_64(4.0, 0.5) };
-        assert!(
-            (r - 2.0).abs() < TOL_64,
-            "pow(4, 0.5) = {r}, expected 2.0"
-        );
+        assert!((r - 2.0).abs() < TOL_64, "pow(4, 0.5) = {r}, expected 2.0");
     }
 
     // ---- Negative bases ----------------------------------------------------
@@ -929,10 +915,7 @@ mod tests {
     #[test]
     fn pow_f64_neg_base_even_int() {
         let r = unsafe { pow_scalar_64(-2.0, 2.0) };
-        assert!(
-            (r - 4.0).abs() < TOL_64,
-            "pow(-2, 2) = {r}, expected 4.0"
-        );
+        assert!((r - 4.0).abs() < TOL_64, "pow(-2, 2) = {r}, expected 4.0");
     }
 
     #[test]

@@ -1,19 +1,26 @@
-//! NEON implementation of [`VecExt`] for `Vec<f32>` and `Vec<f64>`.
+//! NEON implementation of [`SliceExt`] and [`VecExt`] for `f32` / `f64`.
 //!
 //! The generic loop helpers (`binary_op`, `scalar_op`, etc.) live in
 //! [`crate::ops::vec`] and are reused here unchanged. Only the horizontal
-//! reductions and the `impl VecExt<T>` blocks are architecture-specific.
+//! reductions and the `impl SliceExt<T>` blocks are architecture-specific;
+//! the `Vec<T>` impls are thin forwarders to the slice impls.
 
 use std::arch::aarch64::{vmaxq_f32, vmaxq_f64, vminq_f32, vminq_f64};
 
 use crate::arch::neon::{f32x4, f32x4::F32x4};
 use crate::arch::neon::{f64x2, f64x2::F64x2};
 use crate::ops::simd::{Load, Store};
-use crate::ops::vec::{VecExt, binary_op, binary_op_inplace, scalar_op, scalar_op_inplace};
+use crate::ops::vec::{
+    SliceExt, VecExt, binary_op, binary_op_inplace, scalar_op, scalar_op_inplace,
+};
 
-impl VecExt<f32> for Vec<f32> {
+// ---------------------------------------------------------------------------
+// SliceExt<f32> for [f32]
+// ---------------------------------------------------------------------------
+
+impl SliceExt<f32> for [f32] {
     #[inline]
-    fn add(&self, rhs: &Self) -> Vec<f32> {
+    fn add(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -25,7 +32,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn sub(&self, rhs: &Self) -> Vec<f32> {
+    fn sub(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -37,7 +44,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn mul(&self, rhs: &Self) -> Vec<f32> {
+    fn mul(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -49,7 +56,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn div(&self, rhs: &Self) -> Vec<f32> {
+    fn div(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -61,7 +68,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn rem(&self, rhs: &Self) -> Vec<f32> {
+    fn rem(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -93,7 +100,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn add_assign(&mut self, rhs: &Self) {
+    fn add_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -105,7 +112,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn sub_assign(&mut self, rhs: &Self) {
+    fn sub_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -117,7 +124,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn mul_assign(&mut self, rhs: &Self) {
+    fn mul_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -129,7 +136,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn div_assign(&mut self, rhs: &Self) {
+    fn div_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -287,12 +294,12 @@ impl VecExt<f32> for Vec<f32> {
 }
 
 // ---------------------------------------------------------------------------
-// VecExt<f64> for Vec<f64>
+// SliceExt<f64> for [f64]
 // ---------------------------------------------------------------------------
 
-impl VecExt<f64> for Vec<f64> {
+impl SliceExt<f64> for [f64] {
     #[inline]
-    fn add(&self, rhs: &Self) -> Vec<f64> {
+    fn add(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -304,7 +311,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn sub(&self, rhs: &Self) -> Vec<f64> {
+    fn sub(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -316,7 +323,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn mul(&self, rhs: &Self) -> Vec<f64> {
+    fn mul(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -328,7 +335,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn div(&self, rhs: &Self) -> Vec<f64> {
+    fn div(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -340,7 +347,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn rem(&self, rhs: &Self) -> Vec<f64> {
+    fn rem(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -372,7 +379,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn add_assign(&mut self, rhs: &Self) {
+    fn add_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -384,7 +391,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn sub_assign(&mut self, rhs: &Self) {
+    fn sub_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -396,7 +403,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn mul_assign(&mut self, rhs: &Self) {
+    fn mul_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -408,7 +415,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn div_assign(&mut self, rhs: &Self) {
+    fn div_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -566,155 +573,161 @@ impl VecExt<f64> for Vec<f64> {
 }
 
 // ---------------------------------------------------------------------------
+// VecExt<T> for Vec<T> — thin delegators to the slice impls above.
+// ---------------------------------------------------------------------------
+
+macro_rules! impl_vecext_delegate {
+    ($t:ty) => {
+        impl VecExt<$t> for Vec<$t> {
+            #[inline]
+            fn add(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::add(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn sub(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::sub(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn mul(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::mul(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn div(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::div(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn rem(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::rem(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn add_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::add_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn sub_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::sub_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn mul_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::mul_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn div_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::div_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn add_assign(&mut self, rhs: &Self) {
+                SliceExt::add_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn sub_assign(&mut self, rhs: &Self) {
+                SliceExt::sub_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn mul_assign(&mut self, rhs: &Self) {
+                SliceExt::mul_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn div_assign(&mut self, rhs: &Self) {
+                SliceExt::div_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn add_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::add_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn sub_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::sub_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn mul_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::mul_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn div_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::div_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn sum(&self) -> $t {
+                SliceExt::sum(self.as_slice())
+            }
+            #[inline]
+            fn product(&self) -> $t {
+                SliceExt::product(self.as_slice())
+            }
+            #[inline]
+            fn min(&self) -> $t {
+                SliceExt::min(self.as_slice())
+            }
+            #[inline]
+            fn max(&self) -> $t {
+                SliceExt::max(self.as_slice())
+            }
+        }
+    };
+}
+
+impl_vecext_delegate!(f32);
+impl_vecext_delegate!(f64);
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    // ---- add ----------------------------------------------------------------
+    use crate::ops::vec::{SliceExt, VecExt};
+    // Vec×Vec — length 11 exercises both the 8-lane full chunk and the 3-element tail.
 
     #[test]
-    fn add_f32_elementwise() {
-        let a = vec![1.0f32, 2.0, 3.0, 4.0];
-        let b = vec![4.0f32, 3.0, 2.0, 1.0];
-        assert_eq!(a.add(&b), vec![5.0f32; 4]);
+    fn add_produces_correct_sum() {
+        let a: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let b: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let expected: Vec<f32> = (1..=11).map(|x| (x * 2) as f32).collect();
+        assert_eq!(a.add(&b), expected);
     }
 
     #[test]
-    fn add_f64_elementwise() {
-        let a = vec![1.0f64, 2.0];
-        let b = vec![2.0f64, 1.0];
-        assert_eq!(a.add(&b), vec![3.0f64; 2]);
-    }
-
-    // ---- sub ----------------------------------------------------------------
-
-    #[test]
-    fn sub_f32_elementwise() {
-        let a = vec![5.0f32; 4];
-        let b = vec![1.0f32, 2.0, 3.0, 4.0];
-        assert_eq!(a.sub(&b), vec![4.0f32, 3.0, 2.0, 1.0]);
+    fn sub_produces_correct_difference() {
+        let a: Vec<f32> = (1..=11).map(|x| (x * 2) as f32).collect();
+        let b: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let expected: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        assert_eq!(a.sub(&b), expected);
     }
 
     #[test]
-    fn sub_f64_elementwise() {
-        let a = vec![5.0f64; 2];
-        let b = vec![1.0f64, 2.0];
-        assert_eq!(a.sub(&b), vec![4.0f64, 3.0]);
-    }
-
-    // ---- mul ----------------------------------------------------------------
-
-    #[test]
-    fn mul_f32_elementwise() {
-        let a = vec![2.0f32; 4];
-        let b = vec![3.0f32; 4];
-        assert_eq!(a.mul(&b), vec![6.0f32; 4]);
+    fn mul_produces_correct_product() {
+        let a: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let b = vec![2.0f32; 11];
+        let expected: Vec<f32> = (1..=11).map(|x| (x * 2) as f32).collect();
+        assert_eq!(a.mul(&b), expected);
     }
 
     #[test]
-    fn mul_f64_elementwise() {
-        let a = vec![2.0f64; 2];
-        let b = vec![3.0f64; 2];
-        assert_eq!(a.mul(&b), vec![6.0f64; 2]);
-    }
-
-    // ---- div ----------------------------------------------------------------
-
-    #[test]
-    fn div_f32_elementwise() {
-        let a = vec![6.0f32; 4];
-        let b = vec![2.0f32; 4];
-        assert_eq!(a.div(&b), vec![3.0f32; 4]);
+    fn slice_add_smoke_f32() {
+        let a: &[f32] = &[1.0, 2.0, 3.0];
+        let b: &[f32] = &[4.0, 5.0, 6.0];
+        assert_eq!(SliceExt::add(a, b), vec![5.0, 7.0, 9.0]);
     }
 
     #[test]
-    fn div_f64_elementwise() {
-        let a = vec![6.0f64; 2];
-        let b = vec![2.0f64; 2];
-        assert_eq!(a.div(&b), vec![3.0f64; 2]);
-    }
-
-    // ---- scalar ops ---------------------------------------------------------
-
-    #[test]
-    fn add_scalar_f32() {
-        let a = vec![1.0f32; 4];
-        assert_eq!(a.add_scalar(2.0), vec![3.0f32; 4]);
+    fn slice_mul_smoke_f64() {
+        let a: &[f64] = &[1.0, 2.0, 3.0, 4.0, 5.0];
+        let b: &[f64] = &[2.0; 5];
+        assert_eq!(SliceExt::mul(a, b), vec![2.0, 4.0, 6.0, 8.0, 10.0]);
     }
 
     #[test]
-    fn mul_scalar_f64() {
-        let a = vec![2.0f64; 2];
-        assert_eq!(a.mul_scalar(3.0), vec![6.0f64; 2]);
-    }
-
-    // ---- reductions ---------------------------------------------------------
-
-    #[test]
-    fn sum_f32() {
-        let a = vec![1.0f32; 8];
-        assert_eq!(a.sum(), 8.0);
+    fn slice_sum_smoke_f32() {
+        let a: &[f32] = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0];
+        assert_eq!(SliceExt::sum(a), 66.0);
     }
 
     #[test]
-    fn sum_f64() {
-        let a = vec![1.0f64; 4];
-        assert_eq!(a.sum(), 4.0);
-    }
-
-    #[test]
-    fn product_f32() {
-        let a = vec![2.0f32; 4];
-        assert_eq!(a.product(), 16.0);
-    }
-
-    #[test]
-    fn product_f64() {
-        let a = vec![2.0f64; 2];
-        assert_eq!(a.product(), 4.0);
-    }
-
-    #[test]
-    fn min_f32() {
-        let a = vec![3.0f32, 1.0, 4.0, 2.0];
-        assert_eq!(a.min(), 1.0);
-    }
-
-    #[test]
-    fn min_f64() {
-        let a = vec![3.0f64, 1.0];
-        assert_eq!(a.min(), 1.0);
-    }
-
-    #[test]
-    fn max_f32() {
-        let a = vec![3.0f32, 1.0, 4.0, 2.0];
-        assert_eq!(a.max(), 4.0);
-    }
-
-    #[test]
-    fn max_f64() {
-        let a = vec![3.0f64, 1.0];
-        assert_eq!(a.max(), 3.0);
-    }
-
-    // ---- tail handling ------------------------------------------------------
-
-    #[test]
-    fn add_f32_with_tail() {
-        // 5 elements: 1 full F32x4 chunk + 1-lane tail
-        let a = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
-        let b = vec![5.0f32, 4.0, 3.0, 2.0, 1.0];
-        assert_eq!(a.add(&b), vec![6.0f32; 5]);
-    }
-
-    #[test]
-    fn sum_f32_with_tail() {
-        // 7 elements: 1 full F32x4 chunk + 3-lane tail
-        let a = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        assert_eq!(a.sum(), 28.0);
+    fn slice_add_assign_smoke_f32() {
+        let mut a = vec![1.0f32, 2.0, 3.0];
+        let b: &[f32] = &[10.0, 20.0, 30.0];
+        SliceExt::add_assign(a.as_mut_slice(), b);
+        assert_eq!(a, vec![11.0, 22.0, 33.0]);
     }
 }

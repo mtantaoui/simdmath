@@ -201,12 +201,11 @@ impl Store<f64> for F64x2 {
     /// - `ptr` must be non-null and valid for [`LANE_COUNT`] element writes.
     /// - `self.size` must equal [`LANE_COUNT`].
     #[inline]
-    unsafe fn store_at(&self, ptr: *const f64) {
+    unsafe fn store_at(&self, ptr: *mut f64) {
         debug_assert!(self.size == LANE_COUNT, "Size must be == {LANE_COUNT}");
         debug_assert!(!ptr.is_null(), "Pointer must not be null");
 
-        let mut_ptr = ptr as *mut f64;
-        unsafe { vst1q_f64(mut_ptr, self.elements) }
+        unsafe { vst1q_f64(ptr, self.elements) }
     }
 
     /// Writes all [`LANE_COUNT`] lanes to `ptr` using a non-temporal (streaming) store.
@@ -619,8 +618,8 @@ mod tests {
                 size: LANE_COUNT,
                 elements: vld1q_f64([1.0f64, 2.0].as_ptr()),
             };
-            let dst = [0.0f64; LANE_COUNT];
-            v.store_at(dst.as_ptr());
+            let mut dst = [0.0f64; LANE_COUNT];
+            v.store_at(dst.as_mut_ptr());
             assert_eq!(dst, [1.0, 2.0]);
         }
     }

@@ -40,8 +40,8 @@ use std::arch::aarch64::*;
 
 use crate::arch::consts::tan::{
     BIG_THRESH_64, FRAC_2_PI_32, FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_2_64,
-    PIO2_2T_64, PIO4_HI_64, PIO4_LO_64, T0_32, T0_64, T1_32, T1_64, T2_32, T2_64, T3_32,
-    T3_64, T4_32, T4_64, T5_32, T5_64, T6_64, T7_64, T8_64, T9_64, T10_64, T11_64, T12_64, TOINT,
+    PIO2_2T_64, PIO4_HI_64, PIO4_LO_64, T0_32, T0_64, T1_32, T1_64, T2_32, T2_64, T3_32, T3_64,
+    T4_32, T4_64, T5_32, T5_64, T6_64, T7_64, T8_64, T9_64, T10_64, T11_64, T12_64, TOINT,
 };
 
 // =============================================================================
@@ -63,7 +63,6 @@ use crate::arch::consts::tan::{
 ///
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
-#[allow(dead_code)]
 pub(crate) unsafe fn vtan_f32(x: float32x4_t) -> float32x4_t {
     // Process as two 2-lane f64 operations for precision
     // Split input into low and high halves, convert to f64
@@ -198,7 +197,6 @@ unsafe fn tandf_kernel(x: float64x2_t) -> float64x2_t {
 ///
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
-#[allow(dead_code)]
 pub(crate) unsafe fn vtan_f64(x: float64x2_t) -> float64x2_t {
     let frac_2_pi = vdupq_n_f64(FRAC_2_PI_64);
     let pio2_1 = vdupq_n_f64(PIO2_1_64);
@@ -407,31 +405,7 @@ mod tests {
         out
     }
 
-    /// Compute ULP difference for f32
-    fn ulp_diff_f32(a: f32, b: f32) -> u32 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u32::MAX;
-        }
-        let a_bits = a.to_bits() as i32;
-        let b_bits = b.to_bits() as i32;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
-
-    /// Compute ULP difference for f64
-    fn ulp_diff_f64(a: f64, b: f64) -> u64 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u64::MAX;
-        }
-        let a_bits = a.to_bits() as i64;
-        let b_bits = b.to_bits() as i64;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
+    use crate::test_utils::{ulp_diff_f32, ulp_diff_f64};
 
     // =========================================================================
     // f32 tests
