@@ -41,7 +41,6 @@ pub(crate) const B1_32: u32 = 709958130;
 /// `B2 = (127 - 127.0/3 - 24/3 - 0.03306235651) * 2^23`
 ///
 /// After scaling subnormals by `2^24`, this bias accounts for the extra
-#[allow(dead_code)]
 pub(crate) const B2_32: u32 = 642849266;
 
 /// Scale factor for subnormal f32 values: `2^24`.
