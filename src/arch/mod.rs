@@ -1,66 +1,27 @@
-#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
-#[allow(unused_imports)]
-pub(crate) use avx512 as current;
-
-#[cfg(all(
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    target_feature = "avx2"
-))]
-#[allow(unused_imports)]
-pub(crate) use avx2 as current;
-
-#[cfg(all(
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    not(target_feature = "avx2"),
-    target_feature = "sse4.1"
-))]
-#[allow(unused_imports)]
-pub(crate) use sse as current;
-
-#[cfg(all(
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    not(target_feature = "avx2"),
-    not(target_feature = "sse4.1")
-))]
-#[allow(unused_imports)]
-pub(crate) use scalar as current;
-
-#[cfg(target_arch = "aarch64")]
-#[allow(unused_imports)]
-pub(crate) use neon as current;
-
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-#[allow(unused_imports)]
-pub(crate) use scalar as current;
-
 #[cfg(all(
     target_arch = "x86_64",
     not(target_feature = "avx512f"),
     target_feature = "avx2"
 ))]
 pub(crate) mod avx2;
+
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 pub(crate) mod avx512;
+
 pub(crate) mod consts;
+
 #[cfg(target_arch = "aarch64")]
 pub(crate) mod neon;
+
+// Scalar fallback: compiled whenever there is no SIMD backend selected, i.e.
+// either an x86_64 host without AVX2/AVX-512 (with or without SSE4.1) or any
+// other non-x86/non-aarch64 target.
 #[cfg(any(
     all(
         target_arch = "x86_64",
         not(target_feature = "avx512f"),
         not(target_feature = "avx2"),
-        not(target_feature = "sse4.1")
     ),
     not(any(target_arch = "x86_64", target_arch = "aarch64"))
 ))]
 pub(crate) mod scalar;
-#[cfg(all(
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    not(target_feature = "avx2"),
-    target_feature = "sse4.1"
-))]
-pub(crate) mod sse;
