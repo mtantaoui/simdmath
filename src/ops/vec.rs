@@ -22,6 +22,12 @@
 /// All Vec×Vec methods panic when the two vectors have different lengths.
 ///
 /// Concrete implementations are provided per architecture and scalar type.
+///
+/// # See also
+///
+/// The book's
+/// [arithmetic & reductions chapter](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/arithmetic.md)
+/// covers the chunking strategy, tail handling, and reduction accuracy in detail.
 pub trait VecExt<T> {
     /// Element-wise addition of two equal-length vectors.
     ///
@@ -184,14 +190,143 @@ pub trait VecExt<T> {
     fn max(&self) -> T;
 }
 
+/// Slice form of [`VecExt`]; same operations on `&[T]` / `&mut [T]` instead of
+/// `Vec<T>`, returning a freshly-allocated `Vec<T>` for owning operations.
+///
+/// Each method has the same algorithm and panic behaviour as the corresponding
+/// [`VecExt`] method — only the receiver type differs. Two-operand methods
+/// take `rhs: &[T]` (rather than `&Self`) so callers can mix slice sources.
+///
+/// # See also
+///
+/// The book's
+/// [arithmetic & reductions chapter](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/arithmetic.md)
+/// covers the chunking strategy, tail handling, and reduction accuracy in detail.
+pub trait SliceExt<T> {
+    /// Element-wise addition of two equal-length slices.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::ops::vec::SliceExt;
+    /// let a: &[f32] = &[1.0, 2.0, 3.0];
+    /// let b: &[f32] = &[4.0, 5.0, 6.0];
+    /// assert_eq!(a.add(b), vec![5.0f32, 7.0, 9.0]);
+    /// ```
+    fn add(&self, rhs: &[T]) -> Vec<T>;
+
+    /// Element-wise subtraction of two equal-length slices.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn sub(&self, rhs: &[T]) -> Vec<T>;
+
+    /// Element-wise multiplication of two equal-length slices.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn mul(&self, rhs: &[T]) -> Vec<T>;
+
+    /// Element-wise division of two equal-length slices.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn div(&self, rhs: &[T]) -> Vec<T>;
+
+    /// Element-wise truncated remainder of two equal-length slices (matches
+    /// scalar `%` semantics).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn rem(&self, rhs: &[T]) -> Vec<T>;
+
+    /// Adds `rhs` to every element (scalar broadcast).
+    fn add_scalar(&self, rhs: T) -> Vec<T>;
+
+    /// Subtracts `rhs` from every element (scalar broadcast).
+    fn sub_scalar(&self, rhs: T) -> Vec<T>;
+
+    /// Multiplies every element by `rhs` (scalar broadcast).
+    fn mul_scalar(&self, rhs: T) -> Vec<T>;
+
+    /// Divides every element by `rhs` (scalar broadcast).
+    fn div_scalar(&self, rhs: T) -> Vec<T>;
+
+    /// In-place element-wise addition: `self[i] += rhs[i]` for all `i`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn add_assign(&mut self, rhs: &[T]);
+
+    /// In-place element-wise subtraction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn sub_assign(&mut self, rhs: &[T]);
+
+    /// In-place element-wise multiplication.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn mul_assign(&mut self, rhs: &[T]);
+
+    /// In-place element-wise division.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != rhs.len()`.
+    fn div_assign(&mut self, rhs: &[T]);
+
+    /// In-place scalar addition: `self[i] += rhs` for all `i`.
+    fn add_scalar_assign(&mut self, rhs: T);
+
+    /// In-place scalar subtraction.
+    fn sub_scalar_assign(&mut self, rhs: T);
+
+    /// In-place scalar multiplication.
+    fn mul_scalar_assign(&mut self, rhs: T);
+
+    /// In-place scalar division.
+    fn div_scalar_assign(&mut self, rhs: T);
+
+    /// Returns the sum of all elements (additive identity for empty slices).
+    fn sum(&self) -> T;
+
+    /// Returns the product of all elements (multiplicative identity for empty
+    /// slices).
+    fn product(&self) -> T;
+
+    /// Returns the minimum element (`+∞` for an empty slice).
+    fn min(&self) -> T;
+
+    /// Returns the maximum element (`-∞` for an empty slice).
+    fn max(&self) -> T;
+}
+
 // ---------------------------------------------------------------------------
 // Generic loop helpers
 //
 // These are `pub(crate)` so that every architecture-specific `impl VecExt<T>`
 // can reuse them without duplicating code. They are generic over the element
 // type `T` and the SIMD register type `S`, which is supplied at the call site.
+//
+// The `#[allow(dead_code)]` attributes silence false-positive warnings when
+// only the scalar fallback backend is compiled in (which has no need for
+// these SIMD-register helpers).
 // ---------------------------------------------------------------------------
 
+#[allow(unused_imports)]
 use crate::ops::simd::{Load, Store};
 
 /// Applies `op` element-wise to `lhs` and `rhs`, writing results into a freshly
@@ -222,7 +357,7 @@ where
         let b = unsafe { S::load(rhs.as_ptr().add(offset), lane_count) };
         let result = op(a, b);
         // SAFETY: out has capacity n; store_at writes exactly lane_count elements.
-        unsafe { result.store_at(out.as_ptr().add(offset)) };
+        unsafe { result.store_at(out.as_mut_ptr().add(offset)) };
     }
 
     if tail > 0 {
@@ -272,7 +407,7 @@ where
         let a = unsafe { S::load(lhs.as_ptr().add(offset), lane_count) };
         let result = op(a, scalar);
         // SAFETY: out has capacity for offset + lane_count.
-        unsafe { result.store_at(out.as_ptr().add(offset)) };
+        unsafe { result.store_at(out.as_mut_ptr().add(offset)) };
     }
 
     if tail > 0 {
@@ -315,7 +450,7 @@ pub(crate) fn binary_op_inplace<T, S>(
         let result = op(a, b);
         // SAFETY: `a` was already read into a register; store_at writes back
         // to the same valid, mutable region.
-        unsafe { result.store_at(lhs.as_ptr().add(offset)) };
+        unsafe { result.store_at(lhs.as_mut_ptr().add(offset)) };
     }
 
     if tail > 0 {
@@ -353,7 +488,7 @@ pub(crate) fn scalar_op_inplace<T, S>(
         let a = unsafe { S::load(lhs.as_ptr().add(offset), lane_count) };
         let result = op(a, scalar);
         // SAFETY: read-before-write; valid mutable region.
-        unsafe { result.store_at(lhs.as_ptr().add(offset)) };
+        unsafe { result.store_at(lhs.as_mut_ptr().add(offset)) };
     }
 
     if tail > 0 {
@@ -389,7 +524,7 @@ where
         let a = unsafe { S::load(lhs.as_ptr().add(offset), lane_count) };
         let result = op(a);
         // SAFETY: out has capacity for offset + lane_count.
-        unsafe { result.store_at(out.as_ptr().add(offset)) };
+        unsafe { result.store_at(out.as_mut_ptr().add(offset)) };
     }
 
     if tail > 0 {

@@ -1,284 +1,207 @@
-//! NEON `Vec<T>` implementations of [`VecMath`].
-//!
-//! Each method uses [`unary_op`] or [`binary_op`] to partition the slice into
-//! `F32x4` / `F64x2` chunks and applies the corresponding register-level
-//! [`VecMath`] method. The tail (when `len % LANE_COUNT != 0`) is handled
-//! automatically by `unary_op` / `binary_op` via a masked load/store.
+//! NEON `[T]` and `Vec<T>` implementations of [`SliceMath`] / [`VecMath`].
 
 use crate::arch::neon::{f32x4, f32x4::F32x4};
 use crate::arch::neon::{f64x2, f64x2::F64x2};
-use crate::math::VecMath;
+use crate::math::{SliceMath, VecMath};
 use crate::ops::vec::{binary_op, unary_op};
 
-impl VecMath<f32> for Vec<f32> {
-    /// Absolute value of every element, processed 4 lanes at a time via NEON.
+impl SliceMath<f32> for [f32] {
+    /// Absolute value, processed 4 lanes at a time via NEON.
     #[inline]
     fn abs(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.abs())
     }
-
-    /// Arc cosine of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// Uses the three-range minimax rational approximation in
-    /// [`crate::arch::neon::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
+    /// Arc cosine, processed 4 lanes at a time via NEON.
     #[inline]
     fn acos(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.acos())
     }
-
-    /// Arc sine of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// Uses the two-range minimax rational approximation in
-    /// [`crate::arch::neon::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
+    /// Arc sine, processed 4 lanes at a time via NEON.
     #[inline]
     fn asin(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.asin())
     }
-
-    /// Arc tangent of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 3 ULP** error across the entire domain.
+    /// Arc tangent, processed 4 lanes at a time via NEON.
     #[inline]
     fn atan(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.atan())
     }
-
-    /// Two-argument arc tangent: `atan2(self, other)` for every element,
-    /// processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 3 ULP** error across the entire domain.
+    /// Two-arg arc tangent per lane, NEON.
     #[inline]
-    fn atan2(&self, other: &Self) -> Vec<f32> {
+    fn atan2(&self, other: &[f32]) -> Vec<f32> {
         binary_op::<f32, F32x4>(self, other, f32x4::LANE_COUNT, |y, x| y.atan2(&x))
     }
-
-    /// Cube root of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the entire domain.
+    /// Cube root, processed 4 lanes at a time via NEON.
     #[inline]
     fn cbrt(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.cbrt())
     }
-
-    /// Cosine of every element (radians), processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Cosine (radians), processed 4 lanes at a time via NEON.
     #[inline]
     fn cos(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.cos())
     }
-
-    /// Exponential (`e^x`) of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Exponential, processed 4 lanes at a time via NEON.
     #[inline]
     fn exp(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.exp())
     }
-
-    /// Natural logarithm of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Natural log, processed 4 lanes at a time via NEON.
     #[inline]
     fn ln(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.ln())
     }
-
-    /// Sine of every element (radians), processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Sine (radians), processed 4 lanes at a time via NEON.
     #[inline]
     fn sin(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.sin())
     }
-
-    /// Tangent of every element (radians), processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Tangent (radians), processed 4 lanes at a time via NEON.
     #[inline]
     fn tan(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.tan())
     }
-
-    /// `self^exp` for every element, processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// `self^exp` per lane, processed 4 lanes at a time via NEON.
     #[inline]
-    fn pow(&self, exp: &Self) -> Vec<f32> {
+    fn pow(&self, exp: &[f32]) -> Vec<f32> {
         binary_op::<f32, F32x4>(self, exp, f32x4::LANE_COUNT, |b, e| b.pow(&e))
     }
-
-    /// Square root of every element, processed 4 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    /// Square root, processed 4 lanes at a time via NEON.
     #[inline]
     fn sqrt(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.sqrt())
     }
 }
 
-impl VecMath<f64> for Vec<f64> {
-    /// Absolute value of every element, processed 2 lanes at a time via NEON.
+impl SliceMath<f64> for [f64] {
+    /// Absolute value, processed 2 lanes at a time via NEON.
     #[inline]
     fn abs(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.abs())
     }
-
-    /// Arc cosine of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// Uses the three-range minimax rational approximation in
-    /// [`crate::arch::neon::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
+    /// Arc cosine, processed 2 lanes at a time via NEON.
     #[inline]
     fn acos(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.acos())
     }
-
-    /// Arc sine of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// Uses the two-range minimax rational approximation in
-    /// [`crate::arch::neon::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
+    /// Arc sine, processed 2 lanes at a time via NEON.
     #[inline]
     fn asin(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.asin())
     }
-
-    /// Arc tangent of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the entire domain (musl 4-range reduction).
+    /// Arc tangent, processed 2 lanes at a time via NEON.
     #[inline]
     fn atan(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.atan())
     }
-
-    /// Two-argument arc tangent: `atan2(self, other)` for every element,
-    /// processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Two-arg arc tangent per lane, NEON.
     #[inline]
-    fn atan2(&self, other: &Self) -> Vec<f64> {
+    fn atan2(&self, other: &[f64]) -> Vec<f64> {
         binary_op::<f64, F64x2>(self, other, f64x2::LANE_COUNT, |y, x| y.atan2(&x))
     }
-
-    /// Cube root of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 1 ULP** error across the entire domain.
+    /// Cube root, processed 2 lanes at a time via NEON.
     #[inline]
     fn cbrt(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.cbrt())
     }
-
-    /// Cosine of every element (radians), processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Cosine (radians), processed 2 lanes at a time via NEON.
     #[inline]
     fn cos(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.cos())
     }
-
-    /// Exponential (`e^x`) of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Exponential, processed 2 lanes at a time via NEON.
     #[inline]
     fn exp(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.exp())
     }
-
-    /// Natural logarithm of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Natural log, processed 2 lanes at a time via NEON.
     #[inline]
     fn ln(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.ln())
     }
-
-    /// Sine of every element (radians), processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Sine (radians), processed 2 lanes at a time via NEON.
     #[inline]
     fn sin(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.sin())
     }
-
-    /// Tangent of every element (radians), processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// Tangent (radians), processed 2 lanes at a time via NEON.
     #[inline]
     fn tan(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.tan())
     }
-
-    /// `self^exp` for every element, processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 2 ULP** error across the entire domain.
+    /// `self^exp` per lane, processed 2 lanes at a time via NEON.
     #[inline]
-    fn pow(&self, exp: &Self) -> Vec<f64> {
+    fn pow(&self, exp: &[f64]) -> Vec<f64> {
         binary_op::<f64, F64x2>(self, exp, f64x2::LANE_COUNT, |b, e| b.pow(&e))
     }
-
-    /// Square root of every element, processed 2 lanes at a time via NEON.
-    ///
-    /// # Precision
-    ///
-    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    /// Square root, processed 2 lanes at a time via NEON.
     #[inline]
     fn sqrt(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.sqrt())
     }
 }
+
+macro_rules! impl_vecmath_delegate {
+    ($t:ty) => {
+        impl VecMath<$t> for Vec<$t> {
+            #[inline]
+            fn abs(&self) -> Vec<$t> {
+                SliceMath::abs(self.as_slice())
+            }
+            #[inline]
+            fn acos(&self) -> Vec<$t> {
+                SliceMath::acos(self.as_slice())
+            }
+            #[inline]
+            fn asin(&self) -> Vec<$t> {
+                SliceMath::asin(self.as_slice())
+            }
+            #[inline]
+            fn atan(&self) -> Vec<$t> {
+                SliceMath::atan(self.as_slice())
+            }
+            #[inline]
+            fn atan2(&self, other: &Self) -> Vec<$t> {
+                SliceMath::atan2(self.as_slice(), other.as_slice())
+            }
+            #[inline]
+            fn cbrt(&self) -> Vec<$t> {
+                SliceMath::cbrt(self.as_slice())
+            }
+            #[inline]
+            fn cos(&self) -> Vec<$t> {
+                SliceMath::cos(self.as_slice())
+            }
+            #[inline]
+            fn exp(&self) -> Vec<$t> {
+                SliceMath::exp(self.as_slice())
+            }
+            #[inline]
+            fn ln(&self) -> Vec<$t> {
+                SliceMath::ln(self.as_slice())
+            }
+            #[inline]
+            fn sin(&self) -> Vec<$t> {
+                SliceMath::sin(self.as_slice())
+            }
+            #[inline]
+            fn tan(&self) -> Vec<$t> {
+                SliceMath::tan(self.as_slice())
+            }
+            #[inline]
+            fn pow(&self, exp: &Self) -> Vec<$t> {
+                SliceMath::pow(self.as_slice(), exp.as_slice())
+            }
+            #[inline]
+            fn sqrt(&self) -> Vec<$t> {
+                SliceMath::sqrt(self.as_slice())
+            }
+        }
+    };
+}
+
+impl_vecmath_delegate!(f32);
+impl_vecmath_delegate!(f64);
 
 #[cfg(test)]
 mod tests {
@@ -304,7 +227,6 @@ mod tests {
 
     #[test]
     fn abs_f32_with_tail() {
-        // 7 elements: 1 full F32x4 chunk + 3-lane tail
         let a = vec![-1.0f32, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0];
         assert_eq!(a.abs(), vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
     }
@@ -322,8 +244,6 @@ mod tests {
     fn abs_f32_empty() {
         assert_eq!(Vec::<f32>::new().abs(), vec![]);
     }
-
-    // ---- acos f32 ------------------------------------------------------------
 
     #[test]
     fn acos_f32_of_one_is_zero() {
@@ -360,7 +280,6 @@ mod tests {
 
     #[test]
     fn acos_f32_with_tail() {
-        // 7 elements spanning all three computational ranges
         let inputs = vec![0.0f32, 0.5, -0.5, 0.9, -0.9, 1.0, -1.0];
         let result = inputs.acos();
         let expected: Vec<f32> = inputs.iter().map(|x| x.acos()).collect();
@@ -372,8 +291,6 @@ mod tests {
             }
         }
     }
-
-    // ---- asin f32 ------------------------------------------------------------
 
     #[test]
     fn asin_f32_of_zero_is_zero() {
@@ -401,8 +318,6 @@ mod tests {
         assert!(a.asin().iter().all(|x| x.is_nan()));
     }
 
-    // ---- abs f64 -------------------------------------------------------------
-
     #[test]
     fn abs_f64_positive_unchanged() {
         let a: Vec<f64> = (1..=8).map(|i| i as f64).collect();
@@ -418,7 +333,6 @@ mod tests {
 
     #[test]
     fn abs_f64_with_tail() {
-        // 3 elements: 1 full F64x2 chunk + 1-lane tail
         let a = vec![-1.0f64, 2.0, -3.0];
         assert_eq!(a.abs(), vec![1.0f64, 2.0, 3.0]);
     }
@@ -427,8 +341,6 @@ mod tests {
     fn abs_f64_empty() {
         assert_eq!(Vec::<f64>::new().abs(), vec![]);
     }
-
-    // ---- acos f64 ------------------------------------------------------------
 
     #[test]
     fn acos_f64_of_zero_is_pio2() {
@@ -443,8 +355,6 @@ mod tests {
         assert!(a.acos().iter().all(|&x| x == 0.0));
     }
 
-    // ---- asin f64 ------------------------------------------------------------
-
     #[test]
     fn asin_f64_of_zero_is_zero() {
         let a = vec![0.0f64; 2];
@@ -456,5 +366,17 @@ mod tests {
         let a = vec![1.0f64; 2];
         let pio2 = std::f64::consts::FRAC_PI_2;
         assert!(a.asin().iter().all(|&x| (x - pio2).abs() < TOL_F64));
+    }
+
+    #[test]
+    fn slice_abs_smoke_f32() {
+        let a: &[f32] = &[-1.0, 2.0, -3.0];
+        assert_eq!(SliceMath::abs(a), vec![1.0f32, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn slice_sqrt_smoke_f64() {
+        let a: &[f64] = &[1.0, 4.0, 9.0];
+        assert_eq!(SliceMath::sqrt(a), vec![1.0, 2.0, 3.0]);
     }
 }

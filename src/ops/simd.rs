@@ -4,6 +4,10 @@
 //! SIMD vector type must satisfy. Each trait is generic over the scalar element
 //! type `T` (e.g. `f32`, `f64`) and is implemented per-backend in `arch/`.
 //!
+//! When the crate is compiled with the scalar fallback (no SIMD ISA enabled)
+//! these traits have no implementors, so the module-level `#![allow]` below
+//! silences dead-code warnings that would otherwise fire on every method.
+//!
 //! # Trait overview
 //!
 //! | Trait          | Responsibility                                              |
@@ -31,6 +35,8 @@
 //! [`Load`] and [`Store`] methods are `unsafe` because they dereference raw
 //! pointers. Callers must ensure pointers are non-null, sufficiently aligned
 //! (where required), and valid for the indicated number of element reads/writes.
+
+#![allow(dead_code)]
 
 /// Pointer alignment checking for a SIMD vector type.
 ///
@@ -136,9 +142,10 @@ pub(crate) trait Store<T> {
     /// [`store_at_partial`](Self::store_at_partial) directly.
     ///
     /// # Safety
-    /// - `ptr` must be non-null and valid for a full register-width write.
+    /// - `ptr` must be non-null, properly aligned for the element type, and
+    ///   valid for a full register-width write.
     /// - `self.size` must equal the lane count of the implementing type.
-    unsafe fn store_at(&self, ptr: *const T);
+    unsafe fn store_at(&self, ptr: *mut T);
 
     /// Writes all lanes to `ptr` using a non-temporal (streaming) store,
     /// bypassing the CPU cache entirely.
@@ -150,7 +157,6 @@ pub(crate) trait Store<T> {
     ///
     /// # Safety
     /// - `ptr` must be non-null and aligned to the register boundary.
-    #[allow(dead_code)]
     unsafe fn stream_at(&self, ptr: *mut T);
 
     /// Writes all lanes to a pointer that is guaranteed to be register-aligned.

@@ -1,21 +1,23 @@
 //! SIMD-accelerated element-wise mathematical operations on `Vec<T>`.
 //!
-//! This module provides [`VecMath`], a public trait that extends both
-//! architecture-specific SIMD register types (e.g. [`F32x8`]) and `Vec<T>`
-//! with transcendental and mathematical functions backed by SIMD intrinsics.
+//! This module provides [`VecMath`], the public trait that extends `Vec<f32>`
+//! and `Vec<f64>` with transcendental and mathematical functions backed by
+//! SIMD intrinsics.
 //!
 //! # Design
 //!
-//! The trait is implemented at two levels:
+//! Internally `VecMath` is implemented at two levels:
 //!
-//! - **Register level** (`arch/<backend>/math.rs`): implements `VecMath<T>` for
-//!   SIMD register structs such as `F32x8` (AVX2) or `F32x16` (AVX-512). These
-//!   implementations call raw intrinsic wrappers and return the same register type.
+//! - **Register level** (private, `arch/<backend>/math.rs`): implements
+//!   `VecMath<T>` for crate-internal SIMD register structs such as `F32x8`
+//!   (AVX2) or `F32x16` (AVX-512). These call raw intrinsic wrappers and
+//!   return the same register type. **The register types themselves are not
+//!   currently part of the public API** — they may be exposed in a future
+//!   release behind an `unstable-register-api` feature flag.
 //!
-//! - **Vector level** (`math/<backend>.rs`): implements `VecMath<T>` for
-//!   `Vec<T>` using [`crate::ops::vec::unary_op`], which chunks the slice into
-//!   SIMD registers, applies the register-level method, and reassembles the
-//!   result.
+//! - **Vector level** (public, `math/<backend>.rs`): implements `VecMath<T>`
+//!   for `Vec<T>` by chunking the slice into SIMD registers, applying the
+//!   register-level method, and reassembling the result.
 //!
 //! # Relationship to `VecExt`
 //!
@@ -23,19 +25,44 @@
 //! `%`) and reductions (`sum`, `min`, `max`). `VecMath` covers mathematical
 //! functions that go beyond basic arithmetic.
 
-/// Element-wise mathematical operations, implemented for both SIMD register
-/// types and `Vec<T>`.
+/// Element-wise mathematical operations on `Vec<f32>` and `Vec<f64>`.
 ///
-/// - On SIMD register types (e.g. `F32x8`), each method returns the same type
-///   with the operation applied to every lane.
-/// - On `Vec<T>`, each method allocates and returns a new `Vec<T>` of the same
-///   length with the operation applied element-wise.
+/// Each method allocates and returns a new `Vec<T>` of the same length with
+/// the operation applied element-wise. The methods dispatch to a SIMD
+/// implementation chosen at compile time based on target features (see crate
+/// [overview](crate)).
+///
+/// # See also
+///
+/// Each method below has a dedicated chapter in the
+/// [mathematical reference book](https://github.com/mtantaoui/simdmath/tree/main/book/src/functions)
+/// covering the algorithm, error analysis, and per-backend differences:
+///
+/// | Method  | Book chapter |
+/// |---------|--------------|
+/// | [`abs`](Self::abs)       | _(arithmetic-class; see `arithmetic.md`)_ |
+/// | [`sin`](Self::sin)       | [`functions/sin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sin.md) |
+/// | [`cos`](Self::cos)       | [`functions/cos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cos.md) |
+/// | [`tan`](Self::tan)       | [`functions/tan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/tan.md) |
+/// | [`asin`](Self::asin)     | [`functions/asin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/asin.md) |
+/// | [`acos`](Self::acos)     | [`functions/acos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/acos.md) |
+/// | [`atan`](Self::atan)     | [`functions/atan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan.md) |
+/// | [`atan2`](Self::atan2)   | [`functions/atan2.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan2.md) |
+/// | [`exp`](Self::exp)       | [`functions/exp.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/exp.md) |
+/// | [`ln`](Self::ln)         | [`functions/ln.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/ln.md) |
+/// | [`pow`](Self::pow)       | [`functions/pow.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/pow.md) |
+/// | [`sqrt`](Self::sqrt)     | [`functions/sqrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sqrt.md) |
+/// | [`cbrt`](Self::cbrt)     | [`functions/cbrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cbrt.md) |
 pub trait VecMath<T> {
     /// Returns the absolute value of every element.
     ///
     /// Clears the IEEE 754 sign bit of each lane using a bitwise ANDNOT with
     /// the sign-bit mask. Both `+0.0` and `-0.0` map to `+0.0`; `NaN`
     /// payloads are preserved (only the sign bit is cleared).
+    ///
+    /// # Precision
+    ///
+    /// **0 ULP** — exact (a sign-bit clear is bit-for-bit lossless).
     ///
     /// # Examples
     ///
@@ -48,9 +75,13 @@ pub trait VecMath<T> {
 
     /// Returns the arc cosine (in radians) of every element.
     ///
-    /// Computed via a three-range minimax rational approximation (≤ 1 ULP).
-    /// The domain is `[-1, 1]`; values outside this range and `NaN` inputs
-    /// produce `NaN` in the corresponding lane.
+    /// Computed via a three-range minimax rational approximation. The domain
+    /// is `[-1, 1]`; values outside this range and `NaN` inputs produce
+    /// `NaN` in the corresponding lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
     ///
     /// # Examples
     ///
@@ -64,9 +95,13 @@ pub trait VecMath<T> {
 
     /// Returns the arc sine (in radians) of every element.
     ///
-    /// Computed via a two-range minimax rational approximation (≤ 1 ULP).
-    /// The domain is `[-1, 1]`; values outside this range and `NaN` inputs
-    /// produce `NaN` in the corresponding lane.
+    /// Computed via a two-range minimax rational approximation. The domain
+    /// is `[-1, 1]`; values outside this range and `NaN` inputs produce
+    /// `NaN` in the corresponding lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
     ///
     /// # Examples
     ///
@@ -80,11 +115,16 @@ pub trait VecMath<T> {
 
     /// Returns the arc tangent (in radians) of every element.
     ///
-    /// Computed via argument reduction followed by a minimax polynomial.
-    /// - **f32**: ≤ 3 ULP accuracy (single-range reduction)
-    /// - **f64**: ≤ 1 ULP accuracy (musl 4-range reduction)
+    /// Computed via argument reduction followed by a minimax polynomial. The
+    /// domain is all real numbers.
     ///
-    /// The domain is all real numbers; special values:
+    /// # Precision
+    ///
+    /// - **f32**: **≤ 3 ULP** (single-range reduction).
+    /// - **f64**: **≤ 1 ULP** (musl four-range reduction).
+    ///
+    /// # Special values
+    ///
     /// - `atan(±0)` = `±0`
     /// - `atan(±∞)` = `±π/2`
     /// - `atan(NaN)` = `NaN`
@@ -111,6 +151,23 @@ pub trait VecMath<T> {
     ///
     /// - **f32**: ≤ 3 ULP accuracy
     /// - **f64**: ≤ 2 ULP accuracy
+    ///
+    /// # Special values
+    ///
+    /// Follows IEEE 754 / C99 §F.10.1.4. Highlights:
+    ///
+    /// - `atan2(±0, +0)` = `±0`
+    /// - `atan2(±0, -0)` = `±π`
+    /// - `atan2(±0, x > 0)` = `±0`
+    /// - `atan2(±0, x < 0)` = `±π`
+    /// - `atan2(y > 0, ±0)` = `+π/2`
+    /// - `atan2(y < 0, ±0)` = `-π/2`
+    /// - `atan2(±∞, +∞)` = `±π/4`
+    /// - `atan2(±∞, -∞)` = `±3π/4`
+    /// - `atan2(±∞, finite)` = `±π/2`
+    /// - `atan2(finite, +∞)` = `±0`
+    /// - `atan2(finite, -∞)` = `±π`
+    /// - `atan2(NaN, _)` = `atan2(_, NaN)` = `NaN`
     ///
     /// # Examples
     ///
@@ -281,12 +338,24 @@ pub trait VecMath<T> {
     /// ```
     fn tan(&self) -> Self;
 
-    /// Returns `self` raised to the power `exp` for every element: `self[i].powf(exp[i])`.
+    /// Returns `self` raised to the power `exp` for every element: each output
+    /// element is `self[i].powf(exp[i])`.
+    ///
+    /// This is the **element-wise vector exponent** form: both `self` and `exp`
+    /// must have the same length, and each lane is raised to its own exponent.
+    /// For raising every element to the *same* scalar exponent (e.g.
+    /// `xs.powf(2.5)`), build an exponent vector via `vec![y; xs.len()]` for
+    /// now; a dedicated scalar-exponent variant may be added in a future
+    /// release.
     ///
     /// Computed via compensated arithmetic: a high/low split of `ln(|x|)`,
     /// Dekker multiplication by `y`, and a compensated `exp` that folds in
     /// the low-order correction term. This achieves ≤ 2 ULP for both f32
     /// and f64 (the naive `exp(y·ln(x))` loses too much precision for f64).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != exp.len()`.
     ///
     /// # Precision
     ///
@@ -340,8 +409,107 @@ pub trait VecMath<T> {
     fn sqrt(&self) -> Self;
 }
 
+/// Slice form of [`VecMath`]; same operations on `&[T]` instead of `Vec<T>`,
+/// returning a freshly-allocated `Vec<T>`.
+///
+/// Each method has the same algorithm, precision, and special-value behaviour
+/// as the corresponding [`VecMath`] method — only the receiver type differs.
+/// Because `[T]` is unsized, every method explicitly returns `Vec<T>` rather
+/// than `Self`.
+///
+/// # See also
+///
+/// Each method has a dedicated chapter in the
+/// [mathematical reference book](https://github.com/mtantaoui/simdmath/tree/main/book/src/functions)
+/// covering the algorithm, error analysis, and per-backend differences:
+///
+/// | Method  | Book chapter |
+/// |---------|--------------|
+/// | [`abs`](Self::abs)       | _(arithmetic-class; see `arithmetic.md`)_ |
+/// | [`sin`](Self::sin)       | [`functions/sin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sin.md) |
+/// | [`cos`](Self::cos)       | [`functions/cos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cos.md) |
+/// | [`tan`](Self::tan)       | [`functions/tan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/tan.md) |
+/// | [`asin`](Self::asin)     | [`functions/asin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/asin.md) |
+/// | [`acos`](Self::acos)     | [`functions/acos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/acos.md) |
+/// | [`atan`](Self::atan)     | [`functions/atan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan.md) |
+/// | [`atan2`](Self::atan2)   | [`functions/atan2.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan2.md) |
+/// | [`exp`](Self::exp)       | [`functions/exp.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/exp.md) |
+/// | [`ln`](Self::ln)         | [`functions/ln.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/ln.md) |
+/// | [`pow`](Self::pow)       | [`functions/pow.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/pow.md) |
+/// | [`sqrt`](Self::sqrt)     | [`functions/sqrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sqrt.md) |
+/// | [`cbrt`](Self::cbrt)     | [`functions/cbrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cbrt.md) |
+pub trait SliceMath<T> {
+    /// Returns the absolute value of every element. Same precision as
+    /// [`VecMath::abs`] (**0 ULP**, exact).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::SliceMath;
+    /// let a: &[f32] = &[-1.0, 2.0, -3.0, 4.0];
+    /// assert_eq!(a.abs(), vec![1.0f32, 2.0, 3.0, 4.0]);
+    /// ```
+    fn abs(&self) -> Vec<T>;
+
+    /// Arc cosine of every element. Same precision as [`VecMath::acos`]
+    /// (**≤ 1 ULP** on `[-1, 1]`; `NaN` outside the domain).
+    fn acos(&self) -> Vec<T>;
+
+    /// Arc sine of every element. Same precision as [`VecMath::asin`]
+    /// (**≤ 1 ULP** on `[-1, 1]`; `NaN` outside the domain).
+    fn asin(&self) -> Vec<T>;
+
+    /// Arc tangent of every element. Same precision as [`VecMath::atan`]
+    /// (f32 ≤ 3 ULP, f64 ≤ 1 ULP).
+    fn atan(&self) -> Vec<T>;
+
+    /// Two-argument arc tangent: `atan2(self[i], other[i])` for every lane.
+    /// Same precision as [`VecMath::atan2`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != other.len()`.
+    fn atan2(&self, other: &[T]) -> Vec<T>;
+
+    /// Cube root of every element. Same precision as [`VecMath::cbrt`]
+    /// (**≤ 1 ULP**).
+    fn cbrt(&self) -> Vec<T>;
+
+    /// Cosine (in radians) of every element. Same precision as
+    /// [`VecMath::cos`] (**≤ 2 ULP**).
+    fn cos(&self) -> Vec<T>;
+
+    /// Exponential `e^x` of every element. Same precision as
+    /// [`VecMath::exp`] (**≤ 2 ULP**).
+    fn exp(&self) -> Vec<T>;
+
+    /// Natural logarithm of every element. Same precision as
+    /// [`VecMath::ln`] (**≤ 2 ULP**).
+    fn ln(&self) -> Vec<T>;
+
+    /// Sine (in radians) of every element. Same precision as
+    /// [`VecMath::sin`] (**≤ 2 ULP**).
+    fn sin(&self) -> Vec<T>;
+
+    /// Tangent (in radians) of every element. Same precision as
+    /// [`VecMath::tan`] (**≤ 2 ULP**).
+    fn tan(&self) -> Vec<T>;
+
+    /// Element-wise vector exponent: `self[i].powf(exp[i])` per lane. Same
+    /// precision as [`VecMath::pow`] (**≤ 2 ULP**).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != exp.len()`.
+    fn pow(&self, exp: &[T]) -> Vec<T>;
+
+    /// Square root of every element. Same precision as [`VecMath::sqrt`]
+    /// (**≤ 0.5 ULP**, hardware correctly-rounded).
+    fn sqrt(&self) -> Vec<T>;
+}
+
 // ---------------------------------------------------------------------------
-// Vec<T> implementations — arch dispatch
+// Vec<T> / [T] implementations — arch dispatch
 // ---------------------------------------------------------------------------
 
 #[cfg(all(
@@ -356,3 +524,16 @@ mod avx512;
 
 #[cfg(target_arch = "aarch64")]
 mod neon;
+
+// Scalar fallback: used when no SIMD ISA is available, including the SSE-only
+// x86_64 case (which currently delegates to scalar) and any non-x86/non-arm
+// target.
+#[cfg(any(
+    all(
+        target_arch = "x86_64",
+        not(target_feature = "avx512f"),
+        not(target_feature = "avx2"),
+    ),
+    not(any(target_arch = "x86_64", target_arch = "aarch64"))
+))]
+mod scalar;
