@@ -1,4 +1,9 @@
 //! Shared utilities for benchmarks.
+//!
+//! Each bench compiles this module independently and only uses a subset of
+//! the helpers below, so unused-code warnings would fire per-bench without
+//! the module-level allow.
+#![allow(dead_code)]
 
 use std::iter::{Product, Sum};
 use std::ops::{Add, Div, Mul, Rem, Sub};
