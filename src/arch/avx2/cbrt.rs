@@ -371,8 +371,7 @@ pub(crate) unsafe fn _mm256_cbrt_pd(x: __m256d) -> __m256d {
         // Round t to 23 bits (away from zero) for exact t*t
         // -----------------------------------------------------------------------
         let t_bits = _mm256_castpd_si256(t);
-        let t_rounded_bits =
-            _mm256_and_si256(_mm256_add_epi64(t_bits, round_bias), round_mask);
+        let t_rounded_bits = _mm256_and_si256(_mm256_add_epi64(t_bits, round_bias), round_mask);
         let t = _mm256_castsi256_pd(t_rounded_bits);
 
         // -----------------------------------------------------------------------

@@ -89,7 +89,7 @@ pub(crate) unsafe fn _mm256_sin_ps(x: __m256) -> __m256 {
 /// Internal f64 computation for f32 sine (4 lanes).
 ///
 /// This helper computes sin(x) in f64 precision for 4 f32 values that have
-/// been promoted to f64. The extra precision ensures ≤1 ULP in the final f32.
+/// been promoted to f64. The extra precision ensures ≤2 ULP in the final f32.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn sin_ps_in_f64(x: __m256d) -> __m256d {
@@ -422,22 +422,7 @@ mod tests {
         }
     }
 
-    fn ulp_diff_f64(a: f64, b: f64) -> f64 {
-        if a == b {
-            return 0.0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return f64::INFINITY;
-        }
-        // Handle different signs
-        if a.signum() != b.signum() {
-            // Different signs - compare absolute differences instead
-            return (a - b).abs() / f64::EPSILON.max(a.abs().max(b.abs()) * f64::EPSILON);
-        }
-        let a_bits = a.to_bits() as i64;
-        let b_bits = b.to_bits() as i64;
-        (a_bits - b_bits).unsigned_abs() as f64
-    }
+    use crate::test_utils::{ulp_diff_f32, ulp_diff_f64};
 
     // =========================================================================
     // f32 tests
@@ -578,23 +563,17 @@ mod tests {
     #[test]
     fn test_sin_ps_ulp_sweep() {
         unsafe {
-            let mut max_ulp = 0.0f32;
+            let mut max_ulp = 0u32;
             for i in 0..10000 {
                 let x = -2.0 * PI32 + (i as f32 / 10000.0) * 4.0 * PI32;
                 let input = _mm256_set1_ps(x);
                 let result = extract_f32x8(_mm256_sin_ps(input))[0];
                 let expected = x.sin();
                 if expected.is_finite() && result.is_finite() {
-                    let ulp = ((result - expected).abs() / expected.abs().max(f32::MIN_POSITIVE))
-                        * (1.0 / f32::EPSILON);
-                    max_ulp = max_ulp.max(ulp);
+                    max_ulp = max_ulp.max(ulp_diff_f32(result, expected));
                 }
             }
-            assert!(
-                max_ulp <= 2.0,
-                "Max ULP error: {} (expected ≤ 2)",
-                max_ulp
-            );
+            assert!(max_ulp <= 2, "Max ULP error: {} (expected ≤ 2)", max_ulp);
         }
     }
 
@@ -707,38 +686,17 @@ mod tests {
     #[test]
     fn test_sin_pd_ulp_sweep() {
         unsafe {
-            let mut max_ulp = 0.0f64;
-            let mut worst_x = 0.0f64;
-            let mut worst_result = 0.0f64;
-            let mut worst_expected = 0.0f64;
+            let mut max_ulp = 0u64;
             for i in 0..10000 {
                 let x = -2.0 * PI64 + (i as f64 / 10000.0) * 4.0 * PI64;
                 let input = _mm256_set1_pd(x);
                 let result = extract_f64x4(_mm256_sin_pd(input))[0];
                 let expected = x.sin();
-                // Skip values where expected is very close to 0 (ULP not meaningful)
-                if expected.abs() < 1e-10 {
-                    continue;
-                }
                 if expected.is_finite() && result.is_finite() {
-                    let ulp = ulp_diff_f64(result, expected);
-                    if ulp > max_ulp {
-                        max_ulp = ulp;
-                        worst_x = x;
-                        worst_result = result;
-                        worst_expected = expected;
-                    }
+                    max_ulp = max_ulp.max(ulp_diff_f64(result, expected));
                 }
             }
-            eprintln!(
-                "Worst: x={}, result={}, expected={}, ulp={}",
-                worst_x, worst_result, worst_expected, max_ulp
-            );
-            assert!(
-                max_ulp <= 2.0,
-                "Max ULP error: {} (expected ≤ 2)",
-                max_ulp
-            );
+            assert!(max_ulp <= 2, "Max ULP error: {} (expected ≤ 2)", max_ulp);
         }
     }
 }

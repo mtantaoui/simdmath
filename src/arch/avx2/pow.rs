@@ -65,8 +65,8 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 
 use crate::arch::consts::exp::{
-    LN2_HI_64 as EXP_LN2_HI, LN2_INV_64, LN2_LO_64 as EXP_LN2_LO, OVERFLOW_THRESH_64,
-    P1_64, P2_64, P3_64, P4_64, P5_64, UNDERFLOW_THRESH_64,
+    LN2_HI_64 as EXP_LN2_HI, LN2_INV_64, LN2_LO_64 as EXP_LN2_LO, OVERFLOW_THRESH_64, P1_64, P2_64,
+    P3_64, P4_64, P5_64, UNDERFLOW_THRESH_64,
 };
 use crate::arch::consts::ln::{
     LG1_64, LG2_64, LG3_64, LG4_64, LG5_64, LG6_64, LG7_64, LN2_HI_64, LN2_LO_64, SQRT2_64,
@@ -330,9 +330,9 @@ unsafe fn exp_compensated(ehi: __m256d, elo: __m256d) -> __m256d {
 
         // k = round(ehi / ln2)
         let sign_half = _mm256_or_pd(half, _mm256_and_pd(ehi, sign_bit));
-        let k_f64 = _mm256_round_pd::<{ _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC }>(
-            _mm256_fmadd_pd(ehi, ln2_inv, sign_half),
-        );
+        let k_f64 = _mm256_round_pd::<{ _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC }>(_mm256_fmadd_pd(
+            ehi, ln2_inv, sign_half,
+        ));
         let k_i32 = _mm256_cvtpd_epi32(k_f64);
 
         // r = ehi - k·ln2_hi - k·ln2_lo + elo (extended-precision reduction with tail)
@@ -441,8 +441,7 @@ unsafe fn pow_core_f64(x: __m256d, y: __m256d) -> __m256d {
         let y_is_integer = _mm256_cmp_pd(y, y_trunc, _CMP_EQ_OQ);
 
         let y_half = _mm256_mul_pd(y, half);
-        let y_half_trunc =
-            _mm256_round_pd::<{ _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC }>(y_half);
+        let y_half_trunc = _mm256_round_pd::<{ _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC }>(y_half);
         let y_half_is_int = _mm256_cmp_pd(y_half, y_half_trunc, _CMP_EQ_OQ);
         let y_is_odd_int = _mm256_andnot_pd(y_half_is_int, y_is_integer);
 
@@ -633,19 +632,13 @@ mod tests {
     #[test]
     fn pow_ps_fractional_exponent() {
         let r = unsafe { pow_scalar_32(4.0, 0.5) };
-        assert!(
-            (r - 2.0).abs() < TOL_32,
-            "pow(4, 0.5) = {r}, expected 2.0"
-        );
+        assert!((r - 2.0).abs() < TOL_32, "pow(4, 0.5) = {r}, expected 2.0");
     }
 
     #[test]
     fn pow_ps_negative_exponent() {
         let r = unsafe { pow_scalar_32(2.0, -1.0) };
-        assert!(
-            (r - 0.5).abs() < TOL_32,
-            "pow(2, -1) = {r}, expected 0.5"
-        );
+        assert!((r - 0.5).abs() < TOL_32, "pow(2, -1) = {r}, expected 0.5");
     }
 
     // ---- Negative bases with integer exponents -----------------------------
@@ -653,10 +646,7 @@ mod tests {
     #[test]
     fn pow_ps_neg_base_even_int() {
         let r = unsafe { pow_scalar_32(-2.0, 2.0) };
-        assert!(
-            (r - 4.0).abs() < TOL_32,
-            "pow(-2, 2) = {r}, expected 4.0"
-        );
+        assert!((r - 4.0).abs() < TOL_32, "pow(-2, 2) = {r}, expected 4.0");
     }
 
     #[test]
@@ -693,7 +683,10 @@ mod tests {
     #[test]
     fn pow_ps_zero_to_negative_is_inf() {
         let r = unsafe { pow_scalar_32(0.0, -2.0) };
-        assert!(r.is_infinite() && r.is_sign_positive(), "pow(0, -2) = {r}, expected +∞");
+        assert!(
+            r.is_infinite() && r.is_sign_positive(),
+            "pow(0, -2) = {r}, expected +∞"
+        );
     }
 
     #[test]
@@ -926,10 +919,7 @@ mod tests {
     #[test]
     fn pow_pd_fractional_exponent() {
         let r = unsafe { pow_scalar_64(4.0, 0.5) };
-        assert!(
-            (r - 2.0).abs() < TOL_64,
-            "pow(4, 0.5) = {r}, expected 2.0"
-        );
+        assert!((r - 2.0).abs() < TOL_64, "pow(4, 0.5) = {r}, expected 2.0");
     }
 
     // ---- Negative bases ----------------------------------------------------
@@ -937,10 +927,7 @@ mod tests {
     #[test]
     fn pow_pd_neg_base_even_int() {
         let r = unsafe { pow_scalar_64(-2.0, 2.0) };
-        assert!(
-            (r - 4.0).abs() < TOL_64,
-            "pow(-2, 2) = {r}, expected 4.0"
-        );
+        assert!((r - 4.0).abs() < TOL_64, "pow(-2, 2) = {r}, expected 4.0");
     }
 
     #[test]

@@ -147,7 +147,7 @@ impl VecMath<f32> for F32x8 {
     ///
     /// # Precision
     ///
-    /// **≤ 1.5 ULP** error across the entire domain.
+    /// **≤ 2 ULP** error across the entire domain.
     #[inline]
     fn sin(&self) -> F32x8 {
         F32x8 {
@@ -318,7 +318,7 @@ impl VecMath<f64> for F64x4 {
     ///
     /// # Precision
     ///
-    /// **≤ 1.5 ULP** error across the entire domain.
+    /// **≤ 2 ULP** error across the entire domain.
     #[inline]
     fn sin(&self) -> F64x4 {
         F64x4 {
