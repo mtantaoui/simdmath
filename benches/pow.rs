@@ -3,7 +3,7 @@
 #[path = "common.rs"]
 mod common;
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use simdmath::math::VecMath;
 
 use common::*;
@@ -47,31 +47,25 @@ fn make_pow_inputs_f64(n: usize) -> (Vec<f64>, Vec<f64>) {
 }
 
 fn bench_pow_f32(c: &mut Criterion) {
-    let mut g = c.benchmark_group("f32/pow");
     for &n in SIZES_F32 {
+        let mut g = c.benchmark_group(format!("f32/pow/{n}"));
+        g.throughput(Throughput::Elements(n as u64));
         let (bases, exps) = make_pow_inputs_f32(n);
-        g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(bases.pow(black_box(&exps))))
-        });
-        g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_pow_f32(black_box(&bases), black_box(&exps))))
-        });
+        g.bench_function("simd", |b| b.iter(|| black_box(bases.pow(black_box(&exps)))));
+        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_pow_f32(black_box(&bases), black_box(&exps)))));
+        g.finish();
     }
-    g.finish();
 }
 
 fn bench_pow_f64(c: &mut Criterion) {
-    let mut g = c.benchmark_group("f64/pow");
     for &n in SIZES_F64 {
+        let mut g = c.benchmark_group(format!("f64/pow/{n}"));
+        g.throughput(Throughput::Elements(n as u64));
         let (bases, exps) = make_pow_inputs_f64(n);
-        g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(bases.pow(black_box(&exps))))
-        });
-        g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_pow_f64(black_box(&bases), black_box(&exps))))
-        });
+        g.bench_function("simd", |b| b.iter(|| black_box(bases.pow(black_box(&exps)))));
+        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_pow_f64(black_box(&bases), black_box(&exps)))));
+        g.finish();
     }
-    g.finish();
 }
 
 criterion_group!(benches, bench_pow_f32, bench_pow_f64);

@@ -3,7 +3,7 @@
 #[path = "common.rs"]
 mod common;
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use simdmath::math::VecMath;
 
 use common::*;
@@ -27,31 +27,25 @@ fn make_acos_input_f64(n: usize) -> Vec<f64> {
 }
 
 fn bench_acos_f32(c: &mut Criterion) {
-    let mut g = c.benchmark_group("f32/acos");
     for &n in SIZES_F32 {
+        let mut g = c.benchmark_group(format!("f32/acos/{n}"));
+        g.throughput(Throughput::Elements(n as u64));
         let a = make_acos_input_f32(n);
-        g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(a.acos()))
-        });
-        g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_acos_f32(black_box(&a))))
-        });
+        g.bench_function("simd", |b| b.iter(|| black_box(a.acos())));
+        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_acos_f32(black_box(&a)))));
+        g.finish();
     }
-    g.finish();
 }
 
 fn bench_acos_f64(c: &mut Criterion) {
-    let mut g = c.benchmark_group("f64/acos");
     for &n in SIZES_F64 {
+        let mut g = c.benchmark_group(format!("f64/acos/{n}"));
+        g.throughput(Throughput::Elements(n as u64));
         let a = make_acos_input_f64(n);
-        g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(a.acos()))
-        });
-        g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_acos_f64(black_box(&a))))
-        });
+        g.bench_function("simd", |b| b.iter(|| black_box(a.acos())));
+        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_acos_f64(black_box(&a)))));
+        g.finish();
     }
-    g.finish();
 }
 
 criterion_group!(benches, bench_acos_f32, bench_acos_f64);

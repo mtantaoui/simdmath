@@ -3,7 +3,7 @@
 #[path = "common.rs"]
 mod common;
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use simdmath::math::VecMath;
 
 use common::*;
@@ -55,31 +55,25 @@ fn make_atan2_inputs_f64(n: usize) -> (Vec<f64>, Vec<f64>) {
 }
 
 fn bench_atan2_f32(c: &mut Criterion) {
-    let mut g = c.benchmark_group("f32/atan2");
     for &n in SIZES_F32 {
+        let mut g = c.benchmark_group(format!("f32/atan2/{n}"));
+        g.throughput(Throughput::Elements(n as u64));
         let (y, x) = make_atan2_inputs_f32(n);
-        g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(y.atan2(black_box(&x))))
-        });
-        g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_atan2_f32(black_box(&y), black_box(&x))))
-        });
+        g.bench_function("simd", |b| b.iter(|| black_box(y.atan2(black_box(&x)))));
+        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_atan2_f32(black_box(&y), black_box(&x)))));
+        g.finish();
     }
-    g.finish();
 }
 
 fn bench_atan2_f64(c: &mut Criterion) {
-    let mut g = c.benchmark_group("f64/atan2");
     for &n in SIZES_F64 {
+        let mut g = c.benchmark_group(format!("f64/atan2/{n}"));
+        g.throughput(Throughput::Elements(n as u64));
         let (y, x) = make_atan2_inputs_f64(n);
-        g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(y.atan2(black_box(&x))))
-        });
-        g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_atan2_f64(black_box(&y), black_box(&x))))
-        });
+        g.bench_function("simd", |b| b.iter(|| black_box(y.atan2(black_box(&x)))));
+        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_atan2_f64(black_box(&y), black_box(&x)))));
+        g.finish();
     }
-    g.finish();
 }
 
 criterion_group!(benches, bench_atan2_f32, bench_atan2_f64);
