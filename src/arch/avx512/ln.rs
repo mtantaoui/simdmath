@@ -138,169 +138,169 @@ pub(crate) unsafe fn _mm512_ln_pd(x: __m512d) -> __m512d {
 #[target_feature(enable = "avx512f")]
 unsafe fn ln_core_f64(x: __m512d) -> __m512d {
     let zero = _mm512_setzero_pd();
-        let one = _mm512_set1_pd(1.0);
-        let half = _mm512_set1_pd(0.5);
+    let one = _mm512_set1_pd(1.0);
+    let half = _mm512_set1_pd(0.5);
 
-        // =====================================================================
-        // Step 0: Special case detection (save for later)
-        // =====================================================================
+    // =====================================================================
+    // Step 0: Special case detection (save for later)
+    // =====================================================================
 
-        let abs_x = _mm512_abs_pd(x);
-        let inf = _mm512_set1_pd(f64::INFINITY);
+    let abs_x = _mm512_abs_pd(x);
+    let inf = _mm512_set1_pd(f64::INFINITY);
 
-        // x < 0 (excluding -0) → NaN
-        let is_negative = _mm512_cmp_pd_mask(x, zero, _CMP_LT_OQ);
+    // x < 0 (excluding -0) → NaN
+    let is_negative = _mm512_cmp_pd_mask(x, zero, _CMP_LT_OQ);
 
-        // x == 0 or x == -0 → -∞
-        let is_zero = _mm512_cmp_pd_mask(abs_x, zero, _CMP_EQ_OQ);
+    // x == 0 or x == -0 → -∞
+    let is_zero = _mm512_cmp_pd_mask(abs_x, zero, _CMP_EQ_OQ);
 
-        // x == +∞ → +∞
-        let is_pos_inf = _mm512_cmp_pd_mask(x, inf, _CMP_EQ_OQ);
+    // x == +∞ → +∞
+    let is_pos_inf = _mm512_cmp_pd_mask(x, inf, _CMP_EQ_OQ);
 
-        // x is NaN → NaN (unordered comparison: true if either is NaN)
-        let is_nan = _mm512_cmp_pd_mask(x, x, _CMP_UNORD_Q);
+    // x is NaN → NaN (unordered comparison: true if either is NaN)
+    let is_nan = _mm512_cmp_pd_mask(x, x, _CMP_UNORD_Q);
 
-        // =====================================================================
-        // Step 1: Handle subnormals by scaling up
-        // =====================================================================
+    // =====================================================================
+    // Step 1: Handle subnormals by scaling up
+    // =====================================================================
 
-        // Subnormal: 0 < |x| < 2^-1022 (smallest normal)
-        let min_normal = _mm512_set1_pd(f64::MIN_POSITIVE); // 2^-1022
-        let is_subnormal_gt = _mm512_cmp_pd_mask(abs_x, zero, _CMP_GT_OQ);
-        let is_subnormal_lt = _mm512_cmp_pd_mask(abs_x, min_normal, _CMP_LT_OQ);
-        let is_subnormal = is_subnormal_gt & is_subnormal_lt;
+    // Subnormal: 0 < |x| < 2^-1022 (smallest normal)
+    let min_normal = _mm512_set1_pd(f64::MIN_POSITIVE); // 2^-1022
+    let is_subnormal_gt = _mm512_cmp_pd_mask(abs_x, zero, _CMP_GT_OQ);
+    let is_subnormal_lt = _mm512_cmp_pd_mask(abs_x, min_normal, _CMP_LT_OQ);
+    let is_subnormal = is_subnormal_gt & is_subnormal_lt;
 
-        // Scale subnormals by 2^52 to make them normal
-        let two52 = _mm512_set1_pd(TWO52_64);
-        let x_scaled = _mm512_mul_pd(x, two52);
-        let x_work = _mm512_mask_blend_pd(is_subnormal, x, x_scaled);
+    // Scale subnormals by 2^52 to make them normal
+    let two52 = _mm512_set1_pd(TWO52_64);
+    let x_scaled = _mm512_mul_pd(x, two52);
+    let x_work = _mm512_mask_blend_pd(is_subnormal, x, x_scaled);
 
-        // Subnormal exponent adjustment: subtract 52 from k later
-        let neg_52 = _mm512_set1_pd(-52.0);
-        let k_adjust = _mm512_mask_blend_pd(is_subnormal, zero, neg_52);
+    // Subnormal exponent adjustment: subtract 52 from k later
+    let neg_52 = _mm512_set1_pd(-52.0);
+    let k_adjust = _mm512_mask_blend_pd(is_subnormal, zero, neg_52);
 
-        // =====================================================================
-        // Step 2: Extract exponent k and normalize mantissa
-        // =====================================================================
+    // =====================================================================
+    // Step 2: Extract exponent k and normalize mantissa
+    // =====================================================================
 
-        // Get IEEE 754 bit pattern
-        let ix = _mm512_castpd_si512(x_work);
+    // Get IEEE 754 bit pattern
+    let ix = _mm512_castpd_si512(x_work);
 
-        // Extract biased exponent: bits [52:62] → shift right 52
-        let exp_bits = _mm512_srli_epi64(ix, 52);
+    // Extract biased exponent: bits [52:62] → shift right 52
+    let exp_bits = _mm512_srli_epi64(ix, 52);
 
-        // Pack 8×i64 exponents to 8×i32 for conversion to f64
-        let exp_i32 = _mm512_cvtepi64_epi32(exp_bits);
+    // Pack 8×i64 exponents to 8×i32 for conversion to f64
+    let exp_i32 = _mm512_cvtepi64_epi32(exp_bits);
 
-        // Convert to f64: k = biased_exponent - 1023
-        let bias = _mm512_set1_pd(1023.0);
-        let k = _mm512_sub_pd(_mm512_cvtepi32_pd(exp_i32), bias);
-        // Apply subnormal adjustment
-        let k = _mm512_add_pd(k, k_adjust);
+    // Convert to f64: k = biased_exponent - 1023
+    let bias = _mm512_set1_pd(1023.0);
+    let k = _mm512_sub_pd(_mm512_cvtepi32_pd(exp_i32), bias);
+    // Apply subnormal adjustment
+    let k = _mm512_add_pd(k, k_adjust);
 
-        // Normalize mantissa: clear exponent bits, set exponent to 1023 (range [1, 2))
-        let mantissa_mask = _mm512_set1_epi64(0x000FFFFFFFFFFFFF_u64 as i64);
-        let exp_1023 = _mm512_set1_epi64(0x3FF0000000000000_u64 as i64);
-        let m_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1023);
-        let m = _mm512_castsi512_pd(m_bits);
+    // Normalize mantissa: clear exponent bits, set exponent to 1023 (range [1, 2))
+    let mantissa_mask = _mm512_set1_epi64(0x000FFFFFFFFFFFFF_u64 as i64);
+    let exp_1023 = _mm512_set1_epi64(0x3FF0000000000000_u64 as i64);
+    let m_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1023);
+    let m = _mm512_castsi512_pd(m_bits);
 
-        // If m > √2, halve it (set exponent to 1022 → range [0.5, 1)) and increment k
-        let sqrt2 = _mm512_set1_pd(SQRT2_64);
-        let is_big = _mm512_cmp_pd_mask(m, sqrt2, _CMP_GT_OQ);
+    // If m > √2, halve it (set exponent to 1022 → range [0.5, 1)) and increment k
+    let sqrt2 = _mm512_set1_pd(SQRT2_64);
+    let is_big = _mm512_cmp_pd_mask(m, sqrt2, _CMP_GT_OQ);
 
-        // For big m: divide by 2 (subtract 1 from exponent field)
-        let exp_1022 = _mm512_set1_epi64(0x3FE0000000000000_u64 as i64);
-        let m_halved_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1022);
-        let m_halved = _mm512_castsi512_pd(m_halved_bits);
+    // For big m: divide by 2 (subtract 1 from exponent field)
+    let exp_1022 = _mm512_set1_epi64(0x3FE0000000000000_u64 as i64);
+    let m_halved_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1022);
+    let m_halved = _mm512_castsi512_pd(m_halved_bits);
 
-        let m = _mm512_mask_blend_pd(is_big, m, m_halved);
-        let k = _mm512_mask_blend_pd(is_big, k, _mm512_add_pd(k, one)); // k++ if big
+    let m = _mm512_mask_blend_pd(is_big, m, m_halved);
+    let k = _mm512_mask_blend_pd(is_big, k, _mm512_add_pd(k, one)); // k++ if big
 
-        // =====================================================================
-        // Step 3: Compute f = m - 1, s = f / (2 + f)
-        // =====================================================================
+    // =====================================================================
+    // Step 3: Compute f = m - 1, s = f / (2 + f)
+    // =====================================================================
 
-        let f = _mm512_sub_pd(m, one);
-        let two_plus_f = _mm512_add_pd(_mm512_set1_pd(2.0), f);
-        let s = _mm512_div_pd(f, two_plus_f);
+    let f = _mm512_sub_pd(m, one);
+    let two_plus_f = _mm512_add_pd(_mm512_set1_pd(2.0), f);
+    let s = _mm512_div_pd(f, two_plus_f);
 
-        // hfsq = 0.5 * f * f
-        let hfsq = _mm512_mul_pd(half, _mm512_mul_pd(f, f));
+    // hfsq = 0.5 * f * f
+    let hfsq = _mm512_mul_pd(half, _mm512_mul_pd(f, f));
 
-        // =====================================================================
-        // Step 4: Evaluate minimax polynomial R(z) where z = s²
-        // =====================================================================
+    // =====================================================================
+    // Step 4: Evaluate minimax polynomial R(z) where z = s²
+    // =====================================================================
 
-        let z = _mm512_mul_pd(s, s); // z = s²
-        let w = _mm512_mul_pd(z, z); // w = s⁴
+    let z = _mm512_mul_pd(s, s); // z = s²
+    let w = _mm512_mul_pd(z, z); // w = s⁴
 
-        // Split into odd and even powers for better ILP (instruction-level parallelism)
-        // Odd terms:  t1 = Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
-        // Even terms: t2 = Lg2 + w*(Lg4 + w*Lg6)
-        let lg1 = _mm512_set1_pd(LG1_64);
-        let lg2 = _mm512_set1_pd(LG2_64);
-        let lg3 = _mm512_set1_pd(LG3_64);
-        let lg4 = _mm512_set1_pd(LG4_64);
-        let lg5 = _mm512_set1_pd(LG5_64);
-        let lg6 = _mm512_set1_pd(LG6_64);
-        let lg7 = _mm512_set1_pd(LG7_64);
+    // Split into odd and even powers for better ILP (instruction-level parallelism)
+    // Odd terms:  t1 = Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
+    // Even terms: t2 = Lg2 + w*(Lg4 + w*Lg6)
+    let lg1 = _mm512_set1_pd(LG1_64);
+    let lg2 = _mm512_set1_pd(LG2_64);
+    let lg3 = _mm512_set1_pd(LG3_64);
+    let lg4 = _mm512_set1_pd(LG4_64);
+    let lg5 = _mm512_set1_pd(LG5_64);
+    let lg6 = _mm512_set1_pd(LG6_64);
+    let lg7 = _mm512_set1_pd(LG7_64);
 
-        // t1 = Lg1 + w * (Lg3 + w * (Lg5 + w * Lg7))
-        let t1 = _mm512_fmadd_pd(w, lg7, lg5); // Lg5 + w*Lg7
-        let t1 = _mm512_fmadd_pd(w, t1, lg3); // Lg3 + w*(Lg5 + w*Lg7)
-        let t1 = _mm512_fmadd_pd(w, t1, lg1); // Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
+    // t1 = Lg1 + w * (Lg3 + w * (Lg5 + w * Lg7))
+    let t1 = _mm512_fmadd_pd(w, lg7, lg5); // Lg5 + w*Lg7
+    let t1 = _mm512_fmadd_pd(w, t1, lg3); // Lg3 + w*(Lg5 + w*Lg7)
+    let t1 = _mm512_fmadd_pd(w, t1, lg1); // Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
 
-        // t2 = Lg2 + w * (Lg4 + w * Lg6)
-        let t2 = _mm512_fmadd_pd(w, lg6, lg4); // Lg4 + w*Lg6
-        let t2 = _mm512_fmadd_pd(w, t2, lg2); // Lg2 + w*(Lg4 + w*Lg6)
+    // t2 = Lg2 + w * (Lg4 + w * Lg6)
+    let t2 = _mm512_fmadd_pd(w, lg6, lg4); // Lg4 + w*Lg6
+    let t2 = _mm512_fmadd_pd(w, t2, lg2); // Lg2 + w*(Lg4 + w*Lg6)
 
-        // R = z*(t1 + z*t2)
-        let r = _mm512_fmadd_pd(z, t2, t1); // t1 + z*t2
-        let r = _mm512_mul_pd(z, r); // z*(t1 + z*t2)
+    // R = z*(t1 + z*t2)
+    let r = _mm512_fmadd_pd(z, t2, t1); // t1 + z*t2
+    let r = _mm512_mul_pd(z, r); // z*(t1 + z*t2)
 
-        // =====================================================================
-        // Step 5: Reconstruct ln(x) = k*ln2_hi - ((hfsq - (s*(hfsq+R) + k*ln2_lo)) - f)
-        // =====================================================================
+    // =====================================================================
+    // Step 5: Reconstruct ln(x) = k*ln2_hi - ((hfsq - (s*(hfsq+R) + k*ln2_lo)) - f)
+    // =====================================================================
 
-        let ln2_hi = _mm512_set1_pd(LN2_HI_64);
-        let ln2_lo = _mm512_set1_pd(LN2_LO_64);
+    let ln2_hi = _mm512_set1_pd(LN2_HI_64);
+    let ln2_lo = _mm512_set1_pd(LN2_LO_64);
 
-        // s * (hfsq + R)
-        let s_term = _mm512_mul_pd(s, _mm512_add_pd(hfsq, r));
+    // s * (hfsq + R)
+    let s_term = _mm512_mul_pd(s, _mm512_add_pd(hfsq, r));
 
-        // k * ln2_lo
-        let k_ln2_lo = _mm512_mul_pd(k, ln2_lo);
+    // k * ln2_lo
+    let k_ln2_lo = _mm512_mul_pd(k, ln2_lo);
 
-        // inner = s*(hfsq+R) + k*ln2_lo
-        let inner = _mm512_add_pd(s_term, k_ln2_lo);
+    // inner = s*(hfsq+R) + k*ln2_lo
+    let inner = _mm512_add_pd(s_term, k_ln2_lo);
 
-        // hfsq - inner
-        let hfsq_minus_inner = _mm512_sub_pd(hfsq, inner);
+    // hfsq - inner
+    let hfsq_minus_inner = _mm512_sub_pd(hfsq, inner);
 
-        // (hfsq - inner) - f  →  this is the negative of the log(1+f) part
-        let log_part = _mm512_sub_pd(hfsq_minus_inner, f);
+    // (hfsq - inner) - f  →  this is the negative of the log(1+f) part
+    let log_part = _mm512_sub_pd(hfsq_minus_inner, f);
 
-        // result = k*ln2_hi - log_part
-        let result = _mm512_fmsub_pd(k, ln2_hi, log_part);
+    // result = k*ln2_hi - log_part
+    let result = _mm512_fmsub_pd(k, ln2_hi, log_part);
 
-        // =====================================================================
-        // Step 6: Apply special cases
-        // =====================================================================
+    // =====================================================================
+    // Step 6: Apply special cases
+    // =====================================================================
 
-        let nan = _mm512_set1_pd(f64::NAN);
-        let neg_inf = _mm512_set1_pd(f64::NEG_INFINITY);
+    let nan = _mm512_set1_pd(f64::NAN);
+    let neg_inf = _mm512_set1_pd(f64::NEG_INFINITY);
 
-        // x == 0 or x == -0 → -∞
-        let result = _mm512_mask_blend_pd(is_zero, result, neg_inf);
+    // x == 0 or x == -0 → -∞
+    let result = _mm512_mask_blend_pd(is_zero, result, neg_inf);
 
-        // x == +∞ → +∞
-        let result = _mm512_mask_blend_pd(is_pos_inf, result, inf);
+    // x == +∞ → +∞
+    let result = _mm512_mask_blend_pd(is_pos_inf, result, inf);
 
-        // x < 0 → NaN
-        let result = _mm512_mask_blend_pd(is_negative, result, nan);
+    // x < 0 → NaN
+    let result = _mm512_mask_blend_pd(is_negative, result, nan);
 
-        // x is NaN → NaN (propagate)
-        _mm512_mask_blend_pd(is_nan, result, nan)
+    // x is NaN → NaN (propagate)
+    _mm512_mask_blend_pd(is_nan, result, nan)
 }
 
 // =============================================================================
@@ -325,31 +325,7 @@ mod tests {
         out
     }
 
-    /// Compute ULP difference for f32
-    fn ulp_diff_f32(a: f32, b: f32) -> u32 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u32::MAX;
-        }
-        let a_bits = a.to_bits() as i32;
-        let b_bits = b.to_bits() as i32;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
-
-    /// Compute ULP difference for f64
-    fn ulp_diff_f64(a: f64, b: f64) -> u64 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u64::MAX;
-        }
-        let a_bits = a.to_bits() as i64;
-        let b_bits = b.to_bits() as i64;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
+    use crate::test_utils::{ulp_diff_f32, ulp_diff_f64};
 
     // =========================================================================
     // f32 tests

@@ -137,14 +137,13 @@ impl Store<f32> for F32x16 {
     /// # Safety
     /// `ptr` must be non-null and valid for [`LANE_COUNT`] element writes.
     #[inline]
-    unsafe fn store_at(&self, ptr: *const f32) {
+    unsafe fn store_at(&self, ptr: *mut f32) {
         debug_assert!(self.size == LANE_COUNT, "Size must be == {LANE_COUNT}");
         debug_assert!(!ptr.is_null(), "Pointer must not be null");
 
-        let mut_ptr = ptr as *mut f32;
-        match F32x16::is_aligned(ptr) {
-            true => unsafe { self.store_aligned_at(mut_ptr) },
-            false => unsafe { self.store_unaligned_at(mut_ptr) },
+        match F32x16::is_aligned(ptr.cast_const()) {
+            true => unsafe { self.store_aligned_at(ptr) },
+            false => unsafe { self.store_unaligned_at(ptr) },
         }
     }
 
@@ -587,11 +586,11 @@ mod tests {
     #[test]
     fn store_at_dispatches_to_aligned_when_full_and_aligned() {
         let src = Aligned(core::array::from_fn(|i| (i + 1) as f32));
-        let dst = Aligned([0.0; 16]);
+        let mut dst = Aligned([0.0; 16]);
         assert!(F32x16::is_aligned(dst.0.as_ptr()));
         unsafe {
             let v = F32x16::load_aligned(src.0.as_ptr());
-            v.store_at(dst.0.as_ptr());
+            v.store_at(dst.0.as_mut_ptr());
         }
         assert_eq!(dst.0, src.0);
     }
@@ -604,7 +603,7 @@ mod tests {
             let ptr = dst.0.as_mut_ptr().add(1);
             assert!(!F32x16::is_aligned(ptr));
             let v = F32x16::load_aligned(src.0.as_ptr());
-            v.store_at(ptr as *const f32);
+            v.store_at(ptr);
         }
         assert_eq!(&dst.0[1..], &src.0[..]);
     }

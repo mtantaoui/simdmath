@@ -272,31 +272,7 @@ mod tests {
         out
     }
 
-    /// Compute ULP difference for f32
-    fn ulp_diff_f32(a: f32, b: f32) -> u32 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u32::MAX;
-        }
-        let a_bits = a.to_bits() as i32;
-        let b_bits = b.to_bits() as i32;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
-
-    /// Compute ULP difference for f64
-    fn ulp_diff_f64(a: f64, b: f64) -> u64 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u64::MAX;
-        }
-        let a_bits = a.to_bits() as i64;
-        let b_bits = b.to_bits() as i64;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
+    use crate::test_utils::{ulp_diff_f32, ulp_diff_f64};
 
     // =========================================================================
     // f32 tests

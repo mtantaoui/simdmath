@@ -124,14 +124,13 @@ impl Store<f64> for F64x8 {
     /// # Safety
     /// `ptr` must be non-null and valid for [`LANE_COUNT`] element writes.
     #[inline]
-    unsafe fn store_at(&self, ptr: *const f64) {
+    unsafe fn store_at(&self, ptr: *mut f64) {
         debug_assert!(self.size == LANE_COUNT, "Size must be == {LANE_COUNT}");
         debug_assert!(!ptr.is_null(), "Pointer must not be null");
 
-        let mut_ptr = ptr as *mut f64;
-        match F64x8::is_aligned(ptr) {
-            true => unsafe { self.store_aligned_at(mut_ptr) },
-            false => unsafe { self.store_unaligned_at(mut_ptr) },
+        match F64x8::is_aligned(ptr.cast_const()) {
+            true => unsafe { self.store_aligned_at(ptr) },
+            false => unsafe { self.store_unaligned_at(ptr) },
         }
     }
 

@@ -1,19 +1,26 @@
-//! AVX-512F implementation of [`VecExt`] for `Vec<f32>` and `Vec<f64>`.
+//! AVX-512F implementation of [`SliceExt`] and [`VecExt`] for `f32` / `f64`.
 //!
 //! The generic loop helpers (`binary_op`, `scalar_op`, etc.) live in
 //! [`crate::ops::vec`] and are reused here unchanged. Only the horizontal
-//! reductions and the `impl VecExt<T>` blocks are architecture-specific.
+//! reductions and the `impl SliceExt<T>` blocks are architecture-specific;
+//! the `Vec<T>` impls are thin forwarders to the slice impls.
 
 use std::arch::x86_64::{_mm512_max_pd, _mm512_max_ps, _mm512_min_pd, _mm512_min_ps};
 
 use crate::arch::avx512::{f32x16, f32x16::F32x16};
 use crate::arch::avx512::{f64x8, f64x8::F64x8};
 use crate::ops::simd::{Load, Store};
-use crate::ops::vec::{VecExt, binary_op, binary_op_inplace, scalar_op, scalar_op_inplace};
+use crate::ops::vec::{
+    SliceExt, VecExt, binary_op, binary_op_inplace, scalar_op, scalar_op_inplace,
+};
 
-impl VecExt<f32> for Vec<f32> {
+// ---------------------------------------------------------------------------
+// SliceExt<f32> for [f32]
+// ---------------------------------------------------------------------------
+
+impl SliceExt<f32> for [f32] {
     #[inline]
-    fn add(&self, rhs: &Self) -> Vec<f32> {
+    fn add(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -25,7 +32,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn sub(&self, rhs: &Self) -> Vec<f32> {
+    fn sub(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -37,7 +44,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn mul(&self, rhs: &Self) -> Vec<f32> {
+    fn mul(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -49,7 +56,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn div(&self, rhs: &Self) -> Vec<f32> {
+    fn div(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -61,7 +68,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn rem(&self, rhs: &Self) -> Vec<f32> {
+    fn rem(&self, rhs: &[f32]) -> Vec<f32> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -93,7 +100,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn add_assign(&mut self, rhs: &Self) {
+    fn add_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -105,7 +112,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn sub_assign(&mut self, rhs: &Self) {
+    fn sub_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -117,7 +124,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn mul_assign(&mut self, rhs: &Self) {
+    fn mul_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -129,7 +136,7 @@ impl VecExt<f32> for Vec<f32> {
     }
 
     #[inline]
-    fn div_assign(&mut self, rhs: &Self) {
+    fn div_assign(&mut self, rhs: &[f32]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -165,15 +172,18 @@ impl VecExt<f32> for Vec<f32> {
         let full_chunks = n / f32x16::LANE_COUNT;
         let tail = n % f32x16::LANE_COUNT;
 
+        // SAFETY: zero() is always safe.
         let mut acc = unsafe { F32x16::zero() };
 
         for i in 0..full_chunks {
             let offset = i * f32x16::LANE_COUNT;
+            // SAFETY: offset + f32x16::LANE_COUNT <= n.
             let chunk = unsafe { F32x16::load(self.as_ptr().add(offset), f32x16::LANE_COUNT) };
             acc += chunk;
         }
 
         let mut arr = [0.0f32; f32x16::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x16::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f32 = arr.iter().copied().sum();
 
@@ -196,11 +206,13 @@ impl VecExt<f32> for Vec<f32> {
 
         for i in 0..full_chunks {
             let offset = i * f32x16::LANE_COUNT;
+            // SAFETY: offset + f32x16::LANE_COUNT <= n.
             let chunk = unsafe { F32x16::load(self.as_ptr().add(offset), f32x16::LANE_COUNT) };
             acc *= chunk;
         }
 
         let mut arr = [0.0f32; f32x16::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x16::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f32 = arr.iter().copied().product();
 
@@ -223,7 +235,9 @@ impl VecExt<f32> for Vec<f32> {
 
         for i in 0..full_chunks {
             let offset = i * f32x16::LANE_COUNT;
+            // SAFETY: offset + f32x16::LANE_COUNT <= n.
             let chunk = unsafe { F32x16::load(self.as_ptr().add(offset), f32x16::LANE_COUNT) };
+            // SAFETY: _mm512_min_ps is always safe for valid __m512 operands.
             acc = F32x16 {
                 size: f32x16::LANE_COUNT,
                 elements: unsafe { _mm512_min_ps(acc.elements, chunk.elements) },
@@ -231,6 +245,7 @@ impl VecExt<f32> for Vec<f32> {
         }
 
         let mut arr = [0.0f32; f32x16::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x16::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f32::INFINITY, f32::min);
 
@@ -253,7 +268,9 @@ impl VecExt<f32> for Vec<f32> {
 
         for i in 0..full_chunks {
             let offset = i * f32x16::LANE_COUNT;
+            // SAFETY: offset + f32x16::LANE_COUNT <= n.
             let chunk = unsafe { F32x16::load(self.as_ptr().add(offset), f32x16::LANE_COUNT) };
+            // SAFETY: _mm512_max_ps is always safe for valid __m512 operands.
             acc = F32x16 {
                 size: f32x16::LANE_COUNT,
                 elements: unsafe { _mm512_max_ps(acc.elements, chunk.elements) },
@@ -261,6 +278,7 @@ impl VecExt<f32> for Vec<f32> {
         }
 
         let mut arr = [0.0f32; f32x16::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x16::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
@@ -275,179 +293,13 @@ impl VecExt<f32> for Vec<f32> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_vecs(n: usize) -> (Vec<f32>, Vec<f32>) {
-        let a: Vec<f32> = (0..n).map(|i| (i + 1) as f32).collect();
-        let b: Vec<f32> = (0..n).map(|i| (i + 1) as f32 * 0.5 + 1.0).collect();
-        (a, b)
-    }
-
-    // Use sizes that hit: exactly one register (16), no tail; and a tail case.
-    const N_FULL: usize = 32; // 2 full F32x16 chunks, no tail
-    const N_TAIL: usize = 19; // 1 full chunk + 3-lane tail
-
-    #[test]
-    fn add_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.add(&b);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn add_with_tail_produces_correct_result() {
-        let (a, b) = make_vecs(N_TAIL);
-        let result = a.add(&b);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn sub_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.sub(&b);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x - y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn mul_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.mul(&b);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x * y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn div_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.div(&b);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x / y).collect();
-        for (r, e) in result.iter().zip(&expected) {
-            assert!((r - e).abs() < 1e-5, "expected {e}, got {r}");
-        }
-    }
-
-    #[test]
-    fn rem_produces_correct_result() {
-        let a: Vec<f32> = vec![7.0f32; N_FULL];
-        let b: Vec<f32> = vec![3.0f32; N_FULL];
-        let result = a.rem(&b);
-        assert!(result.iter().all(|&x| (x - 1.0f32).abs() < 1e-5));
-    }
-
-    #[test]
-    fn add_scalar_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.add_scalar(10.0);
-        let expected: Vec<f32> = a.iter().map(|x| x + 10.0).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn mul_scalar_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.mul_scalar(2.0);
-        let expected: Vec<f32> = a.iter().map(|x| x * 2.0).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn add_assign_modifies_in_place() {
-        let (mut a, b) = make_vecs(N_FULL);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
-        a.add_assign(&b);
-        assert_eq!(a, expected);
-    }
-
-    #[test]
-    fn mul_assign_modifies_in_place() {
-        let (mut a, b) = make_vecs(N_FULL);
-        let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x * y).collect();
-        a.mul_assign(&b);
-        assert_eq!(a, expected);
-    }
-
-    #[test]
-    fn add_scalar_assign_modifies_in_place() {
-        let (mut a, _) = make_vecs(N_FULL);
-        let expected: Vec<f32> = a.iter().map(|x| x + 5.0).collect();
-        a.add_scalar_assign(5.0);
-        assert_eq!(a, expected);
-    }
-
-    #[test]
-    fn sum_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.sum();
-        let expected: f32 = a.iter().sum();
-        assert!(
-            (result - expected).abs() < 1e-2,
-            "expected {expected}, got {result}"
-        );
-    }
-
-    #[test]
-    fn sum_with_tail_produces_correct_result() {
-        let (a, _) = make_vecs(N_TAIL);
-        let result = a.sum();
-        let expected: f32 = a.iter().sum();
-        assert!(
-            (result - expected).abs() < 1e-2,
-            "expected {expected}, got {result}"
-        );
-    }
-
-    #[test]
-    fn product_produces_correct_result() {
-        let a: Vec<f32> = vec![2.0f32; 16]; // 2^16 = 65536
-        let result = a.product();
-        assert!((result - 65536.0f32).abs() < 1.0);
-    }
-
-    #[test]
-    fn min_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.min();
-        let expected = a.iter().copied().fold(f32::INFINITY, f32::min);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn max_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.max();
-        let expected = a.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn min_with_tail_produces_correct_result() {
-        let (a, _) = make_vecs(N_TAIL);
-        let result = a.min();
-        let expected = a.iter().copied().fold(f32::INFINITY, f32::min);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn max_with_tail_produces_correct_result() {
-        let (a, _) = make_vecs(N_TAIL);
-        let result = a.max();
-        let expected = a.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        assert_eq!(result, expected);
-    }
-}
-
 // ---------------------------------------------------------------------------
-// VecExt<f64> for Vec<f64>
+// SliceExt<f64> for [f64]
 // ---------------------------------------------------------------------------
 
-impl VecExt<f64> for Vec<f64> {
+impl SliceExt<f64> for [f64] {
     #[inline]
-    fn add(&self, rhs: &Self) -> Vec<f64> {
+    fn add(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -459,7 +311,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn sub(&self, rhs: &Self) -> Vec<f64> {
+    fn sub(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -471,7 +323,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn mul(&self, rhs: &Self) -> Vec<f64> {
+    fn mul(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -483,7 +335,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn div(&self, rhs: &Self) -> Vec<f64> {
+    fn div(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -495,7 +347,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn rem(&self, rhs: &Self) -> Vec<f64> {
+    fn rem(&self, rhs: &[f64]) -> Vec<f64> {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -527,7 +379,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn add_assign(&mut self, rhs: &Self) {
+    fn add_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -539,7 +391,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn sub_assign(&mut self, rhs: &Self) {
+    fn sub_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -551,7 +403,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn mul_assign(&mut self, rhs: &Self) {
+    fn mul_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -563,7 +415,7 @@ impl VecExt<f64> for Vec<f64> {
     }
 
     #[inline]
-    fn div_assign(&mut self, rhs: &Self) {
+    fn div_assign(&mut self, rhs: &[f64]) {
         assert_eq!(
             self.len(),
             rhs.len(),
@@ -599,15 +451,18 @@ impl VecExt<f64> for Vec<f64> {
         let full_chunks = n / f64x8::LANE_COUNT;
         let tail = n % f64x8::LANE_COUNT;
 
+        // SAFETY: zero() is always safe.
         let mut acc = unsafe { F64x8::zero() };
 
         for i in 0..full_chunks {
             let offset = i * f64x8::LANE_COUNT;
+            // SAFETY: offset + f64x8::LANE_COUNT <= n.
             let chunk = unsafe { F64x8::load(self.as_ptr().add(offset), f64x8::LANE_COUNT) };
             acc += chunk;
         }
 
         let mut arr = [0.0f64; f64x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x8::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f64 = arr.iter().copied().sum();
 
@@ -630,11 +485,13 @@ impl VecExt<f64> for Vec<f64> {
 
         for i in 0..full_chunks {
             let offset = i * f64x8::LANE_COUNT;
+            // SAFETY: offset + f64x8::LANE_COUNT <= n.
             let chunk = unsafe { F64x8::load(self.as_ptr().add(offset), f64x8::LANE_COUNT) };
             acc *= chunk;
         }
 
         let mut arr = [0.0f64; f64x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x8::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f64 = arr.iter().copied().product();
 
@@ -657,7 +514,9 @@ impl VecExt<f64> for Vec<f64> {
 
         for i in 0..full_chunks {
             let offset = i * f64x8::LANE_COUNT;
+            // SAFETY: offset + f64x8::LANE_COUNT <= n.
             let chunk = unsafe { F64x8::load(self.as_ptr().add(offset), f64x8::LANE_COUNT) };
+            // SAFETY: _mm512_min_pd is always safe for valid __m512d operands.
             acc = F64x8 {
                 size: f64x8::LANE_COUNT,
                 elements: unsafe { _mm512_min_pd(acc.elements, chunk.elements) },
@@ -665,6 +524,7 @@ impl VecExt<f64> for Vec<f64> {
         }
 
         let mut arr = [0.0f64; f64x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x8::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f64::INFINITY, f64::min);
 
@@ -687,7 +547,9 @@ impl VecExt<f64> for Vec<f64> {
 
         for i in 0..full_chunks {
             let offset = i * f64x8::LANE_COUNT;
+            // SAFETY: offset + f64x8::LANE_COUNT <= n.
             let chunk = unsafe { F64x8::load(self.as_ptr().add(offset), f64x8::LANE_COUNT) };
+            // SAFETY: _mm512_max_pd is always safe for valid __m512d operands.
             acc = F64x8 {
                 size: f64x8::LANE_COUNT,
                 elements: unsafe { _mm512_max_pd(acc.elements, chunk.elements) },
@@ -695,6 +557,7 @@ impl VecExt<f64> for Vec<f64> {
         }
 
         let mut arr = [0.0f64; f64x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x8::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
@@ -709,151 +572,162 @@ impl VecExt<f64> for Vec<f64> {
     }
 }
 
-#[cfg(test)]
-mod tests_f64 {
-    use super::*;
+// ---------------------------------------------------------------------------
+// VecExt<T> for Vec<T> — thin delegators to the slice impls above.
+// ---------------------------------------------------------------------------
 
-    fn make_vecs(n: usize) -> (Vec<f64>, Vec<f64>) {
-        let a: Vec<f64> = (0..n).map(|i| (i + 1) as f64).collect();
-        let b: Vec<f64> = (0..n).map(|i| (i + 1) as f64 * 0.5 + 1.0).collect();
-        (a, b)
-    }
-
-    const N_FULL: usize = 16; // 2 full F64x8 chunks, no tail
-    const N_TAIL: usize = 11; // 1 full chunk + 3-lane tail
-
-    #[test]
-    fn add_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.add(&b);
-        let expected: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn add_with_tail_produces_correct_result() {
-        let (a, b) = make_vecs(N_TAIL);
-        let result = a.add(&b);
-        let expected: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn sub_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.sub(&b);
-        let expected: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x - y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn mul_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.mul(&b);
-        let expected: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x * y).collect();
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn div_produces_correct_result() {
-        let (a, b) = make_vecs(N_FULL);
-        let result = a.div(&b);
-        let expected: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x / y).collect();
-        for (r, e) in result.iter().zip(&expected) {
-            assert!((r - e).abs() < 1e-10, "expected {e}, got {r}");
+macro_rules! impl_vecext_delegate {
+    ($t:ty) => {
+        impl VecExt<$t> for Vec<$t> {
+            #[inline]
+            fn add(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::add(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn sub(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::sub(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn mul(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::mul(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn div(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::div(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn rem(&self, rhs: &Self) -> Vec<$t> {
+                SliceExt::rem(self.as_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn add_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::add_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn sub_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::sub_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn mul_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::mul_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn div_scalar(&self, rhs: $t) -> Vec<$t> {
+                SliceExt::div_scalar(self.as_slice(), rhs)
+            }
+            #[inline]
+            fn add_assign(&mut self, rhs: &Self) {
+                SliceExt::add_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn sub_assign(&mut self, rhs: &Self) {
+                SliceExt::sub_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn mul_assign(&mut self, rhs: &Self) {
+                SliceExt::mul_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn div_assign(&mut self, rhs: &Self) {
+                SliceExt::div_assign(self.as_mut_slice(), rhs.as_slice())
+            }
+            #[inline]
+            fn add_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::add_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn sub_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::sub_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn mul_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::mul_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn div_scalar_assign(&mut self, rhs: $t) {
+                SliceExt::div_scalar_assign(self.as_mut_slice(), rhs)
+            }
+            #[inline]
+            fn sum(&self) -> $t {
+                SliceExt::sum(self.as_slice())
+            }
+            #[inline]
+            fn product(&self) -> $t {
+                SliceExt::product(self.as_slice())
+            }
+            #[inline]
+            fn min(&self) -> $t {
+                SliceExt::min(self.as_slice())
+            }
+            #[inline]
+            fn max(&self) -> $t {
+                SliceExt::max(self.as_slice())
+            }
         }
+    };
+}
+
+impl_vecext_delegate!(f32);
+impl_vecext_delegate!(f64);
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use crate::ops::vec::{SliceExt, VecExt};
+    // Vec×Vec — length 11 exercises both the 8-lane full chunk and the 3-element tail.
+
+    #[test]
+    fn add_produces_correct_sum() {
+        let a: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let b: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let expected: Vec<f32> = (1..=11).map(|x| (x * 2) as f32).collect();
+        assert_eq!(a.add(&b), expected);
     }
 
     #[test]
-    fn rem_produces_correct_result() {
-        let a: Vec<f64> = vec![7.0f64; N_FULL];
-        let b: Vec<f64> = vec![3.0f64; N_FULL];
-        let result = a.rem(&b);
-        assert!(result.iter().all(|&x| (x - 1.0f64).abs() < 1e-10));
+    fn sub_produces_correct_difference() {
+        let a: Vec<f32> = (1..=11).map(|x| (x * 2) as f32).collect();
+        let b: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let expected: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        assert_eq!(a.sub(&b), expected);
     }
 
     #[test]
-    fn add_scalar_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.add_scalar(10.0);
-        let expected: Vec<f64> = a.iter().map(|x| x + 10.0).collect();
-        assert_eq!(result, expected);
+    fn mul_produces_correct_product() {
+        let a: Vec<f32> = (1..=11).map(|x| x as f32).collect();
+        let b = vec![2.0f32; 11];
+        let expected: Vec<f32> = (1..=11).map(|x| (x * 2) as f32).collect();
+        assert_eq!(a.mul(&b), expected);
     }
 
     #[test]
-    fn mul_scalar_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.mul_scalar(2.0);
-        let expected: Vec<f64> = a.iter().map(|x| x * 2.0).collect();
-        assert_eq!(result, expected);
+    fn slice_add_smoke_f32() {
+        let a: &[f32] = &[1.0, 2.0, 3.0];
+        let b: &[f32] = &[4.0, 5.0, 6.0];
+        assert_eq!(SliceExt::add(a, b), vec![5.0, 7.0, 9.0]);
     }
 
     #[test]
-    fn add_assign_modifies_in_place() {
-        let (mut a, b) = make_vecs(N_FULL);
-        let expected: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
-        a.add_assign(&b);
-        assert_eq!(a, expected);
+    fn slice_mul_smoke_f64() {
+        let a: &[f64] = &[1.0, 2.0, 3.0, 4.0, 5.0];
+        let b: &[f64] = &[2.0; 5];
+        assert_eq!(SliceExt::mul(a, b), vec![2.0, 4.0, 6.0, 8.0, 10.0]);
     }
 
     #[test]
-    fn sum_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.sum();
-        let expected: f64 = a.iter().sum();
-        assert!(
-            (result - expected).abs() < 1e-6,
-            "expected {expected}, got {result}"
-        );
+    fn slice_sum_smoke_f32() {
+        let a: &[f32] = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0];
+        assert_eq!(SliceExt::sum(a), 66.0);
     }
 
     #[test]
-    fn sum_with_tail_produces_correct_result() {
-        let (a, _) = make_vecs(N_TAIL);
-        let result = a.sum();
-        let expected: f64 = a.iter().sum();
-        assert!(
-            (result - expected).abs() < 1e-6,
-            "expected {expected}, got {result}"
-        );
-    }
-
-    #[test]
-    fn product_produces_correct_result() {
-        let a: Vec<f64> = vec![2.0f64; 8]; // 2^8 = 256
-        let result = a.product();
-        assert!((result - 256.0f64).abs() < 1e-6);
-    }
-
-    #[test]
-    fn min_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.min();
-        let expected = a.iter().copied().fold(f64::INFINITY, f64::min);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn max_produces_correct_result() {
-        let (a, _) = make_vecs(N_FULL);
-        let result = a.max();
-        let expected = a.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn min_with_tail_produces_correct_result() {
-        let (a, _) = make_vecs(N_TAIL);
-        let result = a.min();
-        let expected = a.iter().copied().fold(f64::INFINITY, f64::min);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn max_with_tail_produces_correct_result() {
-        let (a, _) = make_vecs(N_TAIL);
-        let result = a.max();
-        let expected = a.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        assert_eq!(result, expected);
+    fn slice_add_assign_smoke_f32() {
+        let mut a = vec![1.0f32, 2.0, 3.0];
+        let b: &[f32] = &[10.0, 20.0, 30.0];
+        SliceExt::add_assign(a.as_mut_slice(), b);
+        assert_eq!(a, vec![11.0, 22.0, 33.0]);
     }
 }

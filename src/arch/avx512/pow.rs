@@ -73,8 +73,8 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 
 use crate::arch::consts::exp::{
-    LN2_HI_64 as EXP_LN2_HI, LN2_INV_64, LN2_LO_64 as EXP_LN2_LO, OVERFLOW_THRESH_64,
-    P1_64, P2_64, P3_64, P4_64, P5_64, UNDERFLOW_THRESH_64,
+    LN2_HI_64 as EXP_LN2_HI, LN2_INV_64, LN2_LO_64 as EXP_LN2_LO, OVERFLOW_THRESH_64, P1_64, P2_64,
+    P3_64, P4_64, P5_64, UNDERFLOW_THRESH_64,
 };
 use crate::arch::consts::ln::{
     LG1_64, LG2_64, LG3_64, LG4_64, LG5_64, LG6_64, LG7_64, LN2_HI_64, LN2_LO_64, SQRT2_64,
@@ -167,124 +167,124 @@ pub(crate) unsafe fn _mm512_pow_pd(x: __m512d, y: __m512d) -> __m512d {
 #[target_feature(enable = "avx512f")]
 unsafe fn ln_hilo(x: __m512d) -> (__m512d, __m512d) {
     let one = _mm512_set1_pd(1.0);
-        let half = _mm512_set1_pd(0.5);
-        let zero = _mm512_setzero_pd();
+    let half = _mm512_set1_pd(0.5);
+    let zero = _mm512_setzero_pd();
 
-        // =================================================================
-        // Step 1: Handle subnormals by scaling up
-        // =================================================================
+    // =================================================================
+    // Step 1: Handle subnormals by scaling up
+    // =================================================================
 
-        let min_normal = _mm512_set1_pd(f64::MIN_POSITIVE);
-        let is_subnormal = _mm512_cmp_pd_mask(x, zero, _CMP_GT_OQ)
-            & _mm512_cmp_pd_mask(x, min_normal, _CMP_LT_OQ);
+    let min_normal = _mm512_set1_pd(f64::MIN_POSITIVE);
+    let is_subnormal =
+        _mm512_cmp_pd_mask(x, zero, _CMP_GT_OQ) & _mm512_cmp_pd_mask(x, min_normal, _CMP_LT_OQ);
 
-        let two52 = _mm512_set1_pd(TWO52_64);
-        let x_scaled = _mm512_mul_pd(x, two52);
-        let x_work = _mm512_mask_blend_pd(is_subnormal, x, x_scaled);
+    let two52 = _mm512_set1_pd(TWO52_64);
+    let x_scaled = _mm512_mul_pd(x, two52);
+    let x_work = _mm512_mask_blend_pd(is_subnormal, x, x_scaled);
 
-        let neg_52 = _mm512_set1_pd(-52.0);
-        let k_adjust = _mm512_mask_blend_pd(is_subnormal, zero, neg_52);
+    let neg_52 = _mm512_set1_pd(-52.0);
+    let k_adjust = _mm512_mask_blend_pd(is_subnormal, zero, neg_52);
 
-        // =================================================================
-        // Step 2: Extract exponent k and normalize mantissa to [1, 2)
-        // =================================================================
+    // =================================================================
+    // Step 2: Extract exponent k and normalize mantissa to [1, 2)
+    // =================================================================
 
-        let ix = _mm512_castpd_si512(x_work);
+    let ix = _mm512_castpd_si512(x_work);
 
-        // Extract biased exponent: bits [52:62] → shift right 52
-        let exp_bits = _mm512_srli_epi64(ix, 52);
+    // Extract biased exponent: bits [52:62] → shift right 52
+    let exp_bits = _mm512_srli_epi64(ix, 52);
 
-        // Pack 8×i64 exponents to 8×i32 for conversion to f64
-        let exp_i32 = _mm512_cvtepi64_epi32(exp_bits);
+    // Pack 8×i64 exponents to 8×i32 for conversion to f64
+    let exp_i32 = _mm512_cvtepi64_epi32(exp_bits);
 
-        // Convert to f64: k = biased_exponent - 1023
-        let bias = _mm512_set1_pd(1023.0);
-        let k = _mm512_sub_pd(_mm512_cvtepi32_pd(exp_i32), bias);
-        let k = _mm512_add_pd(k, k_adjust);
+    // Convert to f64: k = biased_exponent - 1023
+    let bias = _mm512_set1_pd(1023.0);
+    let k = _mm512_sub_pd(_mm512_cvtepi32_pd(exp_i32), bias);
+    let k = _mm512_add_pd(k, k_adjust);
 
-        // Normalize mantissa: clear exponent, set to biased 1023 → [1, 2)
-        let mantissa_mask = _mm512_set1_epi64(0x000FFFFFFFFFFFFF_u64 as i64);
-        let exp_1023 = _mm512_set1_epi64(0x3FF0000000000000_u64 as i64);
-        let m_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1023);
-        let m = _mm512_castsi512_pd(m_bits);
+    // Normalize mantissa: clear exponent, set to biased 1023 → [1, 2)
+    let mantissa_mask = _mm512_set1_epi64(0x000FFFFFFFFFFFFF_u64 as i64);
+    let exp_1023 = _mm512_set1_epi64(0x3FF0000000000000_u64 as i64);
+    let m_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1023);
+    let m = _mm512_castsi512_pd(m_bits);
 
-        // If m > √2, halve it and increment k
-        let sqrt2 = _mm512_set1_pd(SQRT2_64);
-        let is_big = _mm512_cmp_pd_mask(m, sqrt2, _CMP_GT_OQ);
+    // If m > √2, halve it and increment k
+    let sqrt2 = _mm512_set1_pd(SQRT2_64);
+    let is_big = _mm512_cmp_pd_mask(m, sqrt2, _CMP_GT_OQ);
 
-        let exp_1022 = _mm512_set1_epi64(0x3FE0000000000000_u64 as i64);
-        let m_halved_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1022);
-        let m_halved = _mm512_castsi512_pd(m_halved_bits);
+    let exp_1022 = _mm512_set1_epi64(0x3FE0000000000000_u64 as i64);
+    let m_halved_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1022);
+    let m_halved = _mm512_castsi512_pd(m_halved_bits);
 
-        let m = _mm512_mask_blend_pd(is_big, m, m_halved);
-        let k = _mm512_mask_blend_pd(is_big, k, _mm512_add_pd(k, one));
+    let m = _mm512_mask_blend_pd(is_big, m, m_halved);
+    let k = _mm512_mask_blend_pd(is_big, k, _mm512_add_pd(k, one));
 
-        // =================================================================
-        // Step 3: f = m - 1, s = f / (2 + f)
-        // =================================================================
+    // =================================================================
+    // Step 3: f = m - 1, s = f / (2 + f)
+    // =================================================================
 
-        let f = _mm512_sub_pd(m, one);
-        let two_plus_f = _mm512_add_pd(_mm512_set1_pd(2.0), f);
-        let s = _mm512_div_pd(f, two_plus_f);
-        let hfsq = _mm512_mul_pd(half, _mm512_mul_pd(f, f));
+    let f = _mm512_sub_pd(m, one);
+    let two_plus_f = _mm512_add_pd(_mm512_set1_pd(2.0), f);
+    let s = _mm512_div_pd(f, two_plus_f);
+    let hfsq = _mm512_mul_pd(half, _mm512_mul_pd(f, f));
 
-        // =================================================================
-        // Step 4: Minimax polynomial R(z) where z = s²
-        // =================================================================
+    // =================================================================
+    // Step 4: Minimax polynomial R(z) where z = s²
+    // =================================================================
 
-        let z = _mm512_mul_pd(s, s);
-        let w = _mm512_mul_pd(z, z);
+    let z = _mm512_mul_pd(s, s);
+    let w = _mm512_mul_pd(z, z);
 
-        // Odd powers:  t1 = Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
-        let t1 = _mm512_fmadd_pd(w, _mm512_set1_pd(LG7_64), _mm512_set1_pd(LG5_64));
-        let t1 = _mm512_fmadd_pd(w, t1, _mm512_set1_pd(LG3_64));
-        let t1 = _mm512_fmadd_pd(w, t1, _mm512_set1_pd(LG1_64));
+    // Odd powers:  t1 = Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
+    let t1 = _mm512_fmadd_pd(w, _mm512_set1_pd(LG7_64), _mm512_set1_pd(LG5_64));
+    let t1 = _mm512_fmadd_pd(w, t1, _mm512_set1_pd(LG3_64));
+    let t1 = _mm512_fmadd_pd(w, t1, _mm512_set1_pd(LG1_64));
 
-        // Even powers: t2 = Lg2 + w*(Lg4 + w*Lg6)
-        let t2 = _mm512_fmadd_pd(w, _mm512_set1_pd(LG6_64), _mm512_set1_pd(LG4_64));
-        let t2 = _mm512_fmadd_pd(w, t2, _mm512_set1_pd(LG2_64));
+    // Even powers: t2 = Lg2 + w*(Lg4 + w*Lg6)
+    let t2 = _mm512_fmadd_pd(w, _mm512_set1_pd(LG6_64), _mm512_set1_pd(LG4_64));
+    let t2 = _mm512_fmadd_pd(w, t2, _mm512_set1_pd(LG2_64));
 
-        // R = z * (t1 + z*t2)
-        let r = _mm512_fmadd_pd(z, t2, t1);
-        let r = _mm512_mul_pd(z, r);
+    // R = z * (t1 + z*t2)
+    let r = _mm512_fmadd_pd(z, t2, t1);
+    let r = _mm512_mul_pd(z, r);
 
-        // =================================================================
-        // Step 5: Split result into (hi, lo) using 2Sum
-        //
-        // ln(x) = f - hfsq + s*(hfsq+R) + k*ln2_hi + k*ln2_lo
-        //
-        // We split into:
-        //   val_hi = f - hfsq
-        //   val_lo = (f - val_hi - hfsq) + s*(hfsq+R) + k*ln2_lo
-        //
-        // Then combine with k*ln2_hi using Knuth's 2Sum:
-        //   hi = val_hi + k*ln2_hi   (rounded)
-        //   lo = (rounding error of that addition) + val_lo
-        // =================================================================
+    // =================================================================
+    // Step 5: Split result into (hi, lo) using 2Sum
+    //
+    // ln(x) = f - hfsq + s*(hfsq+R) + k*ln2_hi + k*ln2_lo
+    //
+    // We split into:
+    //   val_hi = f - hfsq
+    //   val_lo = (f - val_hi - hfsq) + s*(hfsq+R) + k*ln2_lo
+    //
+    // Then combine with k*ln2_hi using Knuth's 2Sum:
+    //   hi = val_hi + k*ln2_hi   (rounded)
+    //   lo = (rounding error of that addition) + val_lo
+    // =================================================================
 
-        let ln2_hi = _mm512_set1_pd(LN2_HI_64);
-        let ln2_lo = _mm512_set1_pd(LN2_LO_64);
+    let ln2_hi = _mm512_set1_pd(LN2_HI_64);
+    let ln2_lo = _mm512_set1_pd(LN2_LO_64);
 
-        // val_hi = f - hfsq (may round)
-        let val_hi = _mm512_sub_pd(f, hfsq);
+    // val_hi = f - hfsq (may round)
+    let val_hi = _mm512_sub_pd(f, hfsq);
 
-        // val_lo recovers the rounding error of (f - hfsq) and adds the remaining terms
-        let val_lo = _mm512_sub_pd(f, val_hi);
-        let val_lo = _mm512_sub_pd(val_lo, hfsq);
-        let s_term = _mm512_mul_pd(s, _mm512_add_pd(hfsq, r));
-        let val_lo = _mm512_add_pd(val_lo, s_term);
-        let val_lo = _mm512_fmadd_pd(k, ln2_lo, val_lo);
+    // val_lo recovers the rounding error of (f - hfsq) and adds the remaining terms
+    let val_lo = _mm512_sub_pd(f, val_hi);
+    let val_lo = _mm512_sub_pd(val_lo, hfsq);
+    let s_term = _mm512_mul_pd(s, _mm512_add_pd(hfsq, r));
+    let val_lo = _mm512_add_pd(val_lo, s_term);
+    let val_lo = _mm512_fmadd_pd(k, ln2_lo, val_lo);
 
-        // Knuth 2Sum: hi = val_hi + k*ln2_hi, capturing the rounding error
-        let k_ln2_hi = _mm512_mul_pd(k, ln2_hi);
-        let hi = _mm512_add_pd(val_hi, k_ln2_hi);
-        let b_virt = _mm512_sub_pd(hi, val_hi);
-        let a_virt = _mm512_sub_pd(hi, b_virt);
-        let b_err = _mm512_sub_pd(k_ln2_hi, b_virt);
-        let a_err = _mm512_sub_pd(val_hi, a_virt);
-        let lo = _mm512_add_pd(_mm512_add_pd(a_err, b_err), val_lo);
+    // Knuth 2Sum: hi = val_hi + k*ln2_hi, capturing the rounding error
+    let k_ln2_hi = _mm512_mul_pd(k, ln2_hi);
+    let hi = _mm512_add_pd(val_hi, k_ln2_hi);
+    let b_virt = _mm512_sub_pd(hi, val_hi);
+    let a_virt = _mm512_sub_pd(hi, b_virt);
+    let b_err = _mm512_sub_pd(k_ln2_hi, b_virt);
+    let a_err = _mm512_sub_pd(val_hi, a_virt);
+    let lo = _mm512_add_pd(_mm512_add_pd(a_err, b_err), val_lo);
 
-        (hi, lo)
+    (hi, lo)
 }
 
 // =============================================================================
@@ -338,10 +338,8 @@ unsafe fn exp_compensated(ehi: __m512d, elo: __m512d) -> __m512d {
         let ehi_sign = _mm512_castpd_si512(_mm512_and_pd(ehi, sign_bit));
         let half_bits = _mm512_castpd_si512(half);
         let sign_half = _mm512_castsi512_pd(_mm512_or_si512(half_bits, ehi_sign));
-        let k_f64 = _mm512_roundscale_pd(
-            _mm512_fmadd_pd(ehi, ln2_inv, sign_half),
-            _MM_FROUND_TO_ZERO,
-        );
+        let k_f64 =
+            _mm512_roundscale_pd(_mm512_fmadd_pd(ehi, ln2_inv, sign_half), _MM_FROUND_TO_ZERO);
         let k_i32 = _mm512_cvtpd_epi32(k_f64);
 
         // r = ehi - k·ln2_hi - k·ln2_lo + elo (extended-precision reduction with tail)
@@ -650,19 +648,13 @@ mod tests {
     #[test]
     fn pow_ps_fractional_exponent() {
         let r = unsafe { pow_scalar_32(4.0, 0.5) };
-        assert!(
-            (r - 2.0).abs() < TOL_32,
-            "pow(4, 0.5) = {r}, expected 2.0"
-        );
+        assert!((r - 2.0).abs() < TOL_32, "pow(4, 0.5) = {r}, expected 2.0");
     }
 
     #[test]
     fn pow_ps_negative_exponent() {
         let r = unsafe { pow_scalar_32(2.0, -1.0) };
-        assert!(
-            (r - 0.5).abs() < TOL_32,
-            "pow(2, -1) = {r}, expected 0.5"
-        );
+        assert!((r - 0.5).abs() < TOL_32, "pow(2, -1) = {r}, expected 0.5");
     }
 
     // ---- Negative bases with integer exponents -----------------------------
@@ -670,10 +662,7 @@ mod tests {
     #[test]
     fn pow_ps_neg_base_even_int() {
         let r = unsafe { pow_scalar_32(-2.0, 2.0) };
-        assert!(
-            (r - 4.0).abs() < TOL_32,
-            "pow(-2, 2) = {r}, expected 4.0"
-        );
+        assert!((r - 4.0).abs() < TOL_32, "pow(-2, 2) = {r}, expected 4.0");
     }
 
     #[test]
@@ -710,7 +699,10 @@ mod tests {
     #[test]
     fn pow_ps_zero_to_negative_is_inf() {
         let r = unsafe { pow_scalar_32(0.0, -2.0) };
-        assert!(r.is_infinite() && r.is_sign_positive(), "pow(0, -2) = {r}, expected +∞");
+        assert!(
+            r.is_infinite() && r.is_sign_positive(),
+            "pow(0, -2) = {r}, expected +∞"
+        );
     }
 
     #[test]
@@ -831,12 +823,10 @@ mod tests {
     #[test]
     fn pow_ps_processes_all_16_lanes() {
         let bases: [f32; 16] = [
-            1.0, 2.0, 3.0, 4.0, 0.5, 10.0, 100.0, 0.1,
-            5.0, 7.0, 0.25, 8.0, 1.5, 9.0, 0.01, 6.0,
+            1.0, 2.0, 3.0, 4.0, 0.5, 10.0, 100.0, 0.1, 5.0, 7.0, 0.25, 8.0, 1.5, 9.0, 0.01, 6.0,
         ];
         let exps: [f32; 16] = [
-            5.0, 3.0, 2.0, 0.5, 2.0, -1.0, 0.5, 3.0,
-            2.0, 0.5, -1.0, 1.0, 3.0, -0.5, 2.0, 1.5,
+            5.0, 3.0, 2.0, 0.5, 2.0, -1.0, 0.5, 3.0, 2.0, 0.5, -1.0, 1.0, 3.0, -0.5, 2.0, 1.5,
         ];
         unsafe {
             let vx = _mm512_loadu_ps(bases.as_ptr());
@@ -949,10 +939,7 @@ mod tests {
     #[test]
     fn pow_pd_fractional_exponent() {
         let r = unsafe { pow_scalar_64(4.0, 0.5) };
-        assert!(
-            (r - 2.0).abs() < TOL_64,
-            "pow(4, 0.5) = {r}, expected 2.0"
-        );
+        assert!((r - 2.0).abs() < TOL_64, "pow(4, 0.5) = {r}, expected 2.0");
     }
 
     // ---- Negative bases ----------------------------------------------------
@@ -960,10 +947,7 @@ mod tests {
     #[test]
     fn pow_pd_neg_base_even_int() {
         let r = unsafe { pow_scalar_64(-2.0, 2.0) };
-        assert!(
-            (r - 4.0).abs() < TOL_64,
-            "pow(-2, 2) = {r}, expected 4.0"
-        );
+        assert!((r - 4.0).abs() < TOL_64, "pow(-2, 2) = {r}, expected 4.0");
     }
 
     #[test]

@@ -66,7 +66,6 @@ use crate::arch::consts::cos::{
 /// Requires AVX-512F and FMA support. The caller must ensure these features are
 /// available at runtime.
 #[inline]
-#[allow(dead_code)]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_cos_ps(x: __m512) -> __m512 {
     unsafe {
@@ -238,7 +237,6 @@ unsafe fn sindf_kernel(x: __m512d) -> __m512d {
 /// Requires AVX-512F and FMA support. The caller must ensure these features are
 /// available at runtime.
 #[inline]
-#[allow(dead_code)]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_cos_pd(x: __m512d) -> __m512d {
     unsafe {
@@ -415,31 +413,7 @@ mod tests {
         out
     }
 
-    /// Compute ULP difference between two f32 values
-    fn ulp_diff_f32(a: f32, b: f32) -> u32 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u32::MAX;
-        }
-        let a_bits = a.to_bits() as i32;
-        let b_bits = b.to_bits() as i32;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
-
-    /// Compute ULP difference between two f64 values
-    fn ulp_diff_f64(a: f64, b: f64) -> u64 {
-        if a.is_nan() && b.is_nan() {
-            return 0;
-        }
-        if a.is_nan() || b.is_nan() {
-            return u64::MAX;
-        }
-        let a_bits = a.to_bits() as i64;
-        let b_bits = b.to_bits() as i64;
-        (a_bits.wrapping_sub(b_bits)).unsigned_abs()
-    }
+    use crate::test_utils::{ulp_diff_f32, ulp_diff_f64};
 
     // =========================================================================
     // f32 Tests
