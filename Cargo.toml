@@ -2,12 +2,50 @@
 name = "simdmath"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.87"
+authors = ["Mahdi Tantaoui <mohamedalmahdi.tantaoui@gmail.com>"]
+description = "High-performance SIMD implementations of mathematical functions for Rust (AVX2, AVX-512, NEON), with worst-case ≤ 3 ULP accuracy (most functions ≤ 1 ULP; sqrt and abs correctly rounded)."
+license = "MIT"
+repository = "https://github.com/mtantaoui/simdmath"
+documentation = "https://docs.rs/simdmath"
+homepage = "https://github.com/mtantaoui/simdmath"
+readme = "README.md"
+keywords = ["simd", "math", "avx", "neon", "vector"]
+categories = ["mathematics", "hardware-support"]
+exclude = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "REVIEW.md",
+    ".github/copilot-instructions.md",
+    "book/",
+    "/.cargo/",
+]
+# Each bench file uses a custom (criterion) harness, so we list them
+# explicitly with `harness = false`. Cargo has no global "harness = false",
+# so the manual list is required; `autobenches = false` prevents Cargo from
+# auto-detecting `benches/common.rs` (the shared helper module) as a bench.
 autobenches = false
+
+[features]
+default = []
+# Reserved for a future release. Will expose the per-backend SIMD register
+# types (`F32x8`, `F32x16`, `F32x4`, …) and their `Load` / `Store` traits as
+# part of the public API. Disabled by default until the surface is stable.
+unstable-register-api = []
 
 [dependencies]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+
+[package.metadata.docs.rs]
+# Mirror .cargo/config.toml so docs.rs renders KaTeX math.
+rustdoc-args = ["--html-in-header", "./docs/docs-header.html"]
+# docs.rs builds on x86_64 without target-feature flags by default. Until
+# the runtime-dispatch / scalar-fallback work lands, hint the build to use
+# AVX2 so it picks a real backend instead of the compile_error! stub.
+rustc-args = ["-C", "target-feature=+avx2,+fma"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
 [[bench]]
 name = "acos"
