@@ -11,6 +11,16 @@ env:
   RUSTFLAGS: "-C target-feature=+avx512f,+avx512vl"
 
 jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
@@ -21,10 +31,14 @@ jobs:
           components: clippy
       - run: cargo clippy --all-targets -- -D warnings
 
-  test:
-    name: Test
+  build:
+    name: Build (no run — GitHub runners lack AVX-512)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test
+      # GitHub-hosted ubuntu-latest runners do not provide AVX-512 instructions,
+      # so executing the test binary would SIGILL. We compile-only here; once a
+      # self-hosted AVX-512 runner or Intel SDE integration is available, switch
+      # to a real `cargo test` job.
+      - run: cargo test --no-run

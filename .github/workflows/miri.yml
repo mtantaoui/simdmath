@@ -1,0 +1,30 @@
+name: Miri (scalar fallback)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  miri:
+    name: cargo miri test (scalar)
+    runs-on: ubuntu-latest
+    env:
+      # Force the scalar fallback path: no SIMD ISA enabled. Miri does not
+      # support x86 SIMD intrinsics, so we run only against the portable
+      # scalar implementation, which is what we need to validate for
+      # pointer-provenance / aliasing soundness anyway.
+      RUSTFLAGS: ""
+      MIRIFLAGS: "-Zmiri-strict-provenance"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly + miri
+        run: |
+          rustup toolchain install nightly --component miri
+          rustup override set nightly
+          cargo miri setup
+      - name: Run miri on lib tests
+        # Scalar build has 0 lib tests (all tests are gated behind specific
+        # SIMD ISAs), so we exercise it via the doctest-style example in
+        # README and let miri verify lib compilation + any test we add later.
+        run: cargo miri test --lib

@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C target-feature=+avx2"
+  RUSTFLAGS: "-C target-feature=+avx2,+fma"
 
 jobs:
   fmt:

@@ -1,5 +1,10 @@
 [build]
-# Compile for the current machine's CPU, enabling all available SIMD features
-# (AVX2, AVX-512, NEON, etc.) automatically. This drives the compile-time
-# dispatch in src/arch/mod.rs without requiring explicit RUSTFLAGS on each command.
-rustflags = ["-C", "target-cpu=native"]
+# Inject KaTeX into rustdoc so $..$ and $$..$$ math renders.
+# Mirror this in Cargo.toml under [package.metadata.docs.rs] so docs.rs renders
+# identically.
+rustdocflags = ["--html-in-header", "./docs/docs-header.html"]
+
+# Note: do NOT set `target-cpu=native` here. That config is checked into the
+# repository and would silently apply to anyone who builds simdmath as a path
+# or git dependency. Developers wanting native-CPU builds should set RUSTFLAGS
+# in their own environment.
