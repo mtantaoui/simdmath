@@ -1,0 +1,5 @@
+# Pinned dependencies for simdmath book figure generation.
+# See figures/README.md for the rationale.
+numpy==2.0.1
+matplotlib==3.9.2
+mpmath==1.3.0

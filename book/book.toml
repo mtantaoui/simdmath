@@ -1,0 +1,19 @@
+[book]
+authors = ["Mahdi Tantaoui"]
+language = "en"
+src = "src"
+title = "simdmath: SIMD Math Functions in Rust"
+description = "Mathematical reference and algorithmic derivations for the simdmath crate."
+
+[output.html]
+git-repository-url = "https://github.com/mtantaoui/simdmath"
+mathjax-support = true
+additional-css = []
+additional-js = []
+
+[output.html.playground]
+runnable = false
+
+[output.html.fold]
+enable = true
+level = 1
