@@ -1,3 +1,3 @@
 mod arch;
-mod math;
+pub mod math;
 pub mod ops;

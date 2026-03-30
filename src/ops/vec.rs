@@ -366,3 +366,46 @@ pub(crate) fn scalar_op_inplace<T, S>(
         unsafe { result.store_at_partial(lhs.as_mut_ptr().add(offset)) };
     }
 }
+
+/// Applies a unary `op` element-wise to `lhs`, writing results into a freshly
+/// allocated `Vec`. Used for operations like `abs` that take a single operand.
+#[inline]
+pub(crate) fn unary_op<T, S>(
+    lhs: &[T],
+    lane_count: usize,
+    op: impl Fn(S) -> S,
+) -> Vec<T>
+where
+    T: Copy,
+    S: Load<T, Output = S> + Store<T> + Copy,
+{
+    let n = lhs.len();
+    let full_chunks = n / lane_count;
+    let tail = n % lane_count;
+
+    // SAFETY: capacity is n; every index in [0, n) will be written before
+    // set_len is called, so no uninitialised bytes are ever exposed.
+    let mut out: Vec<T> = Vec::with_capacity(n);
+
+    for i in 0..full_chunks {
+        let offset = i * lane_count;
+        // SAFETY: offset + lane_count <= n.
+        let a = unsafe { S::load(lhs.as_ptr().add(offset), lane_count) };
+        let result = op(a);
+        // SAFETY: out has capacity for offset + lane_count.
+        unsafe { result.store_at(out.as_ptr().add(offset)) };
+    }
+
+    if tail > 0 {
+        let offset = full_chunks * lane_count;
+        // SAFETY: offset < n; tail < lane_count.
+        let a = unsafe { S::load_partial(lhs.as_ptr().add(offset), tail) };
+        let result = op(a);
+        // SAFETY: writes only the first `tail` elements.
+        unsafe { result.store_at_partial(out.as_mut_ptr().add(offset)) };
+    }
+
+    // SAFETY: all n elements have been written.
+    unsafe { out.set_len(n) };
+    out
+}

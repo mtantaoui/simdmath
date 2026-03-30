@@ -1,0 +1,183 @@
+//! AVX2 `Vec<T>` implementations of [`VecMath`].
+//!
+//! Each method uses [`unary_op`] to partition the slice into `F32x8` / `F64x4`
+//! chunks and applies the corresponding register-level [`VecMath`] method.
+//! The tail (when `len % LANE_COUNT != 0`) is handled automatically by
+//! `unary_op` via a masked load/store.
+
+use crate::arch::avx2::{f32x8, f32x8::F32x8};
+use crate::arch::avx2::{f64x4, f64x4::F64x4};
+use crate::math::VecMath;
+use crate::ops::vec::unary_op;
+
+impl VecMath<f32> for Vec<f32> {
+    /// Absolute value of every element, processed 8 lanes at a time via AVX2.
+    #[inline]
+    fn abs(&self) -> Vec<f32> {
+        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.abs())
+    }
+
+    /// Arc cosine of every element, processed 8 lanes at a time via AVX2.
+    ///
+    /// Uses the three-range minimax rational approximation in
+    /// [`crate::arch::avx2::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
+    #[inline]
+    fn acos(&self) -> Vec<f32> {
+        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.acos())
+    }
+}
+
+impl VecMath<f64> for Vec<f64> {
+    /// Absolute value of every element, processed 4 lanes at a time via AVX2.
+    #[inline]
+    fn abs(&self) -> Vec<f64> {
+        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.abs())
+    }
+
+    /// Arc cosine of every element, falling back to scalar `f64::acos`
+    /// per lane (no AVX2 `acos_pd` is implemented yet).
+    #[inline]
+    fn acos(&self) -> Vec<f64> {
+        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.acos())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TOL_F32: f32 = 5e-7;
+    const TOL_F64: f64 = 1e-14;
+
+    // ---- abs f32 -------------------------------------------------------------
+
+    #[test]
+    fn abs_f32_positive_unchanged() {
+        let a: Vec<f32> = (1..=16).map(|i| i as f32).collect();
+        assert_eq!(a.abs(), a);
+    }
+
+    #[test]
+    fn abs_f32_negative_become_positive() {
+        let a: Vec<f32> = (1..=16).map(|i| -(i as f32)).collect();
+        let expected: Vec<f32> = (1..=16).map(|i| i as f32).collect();
+        assert_eq!(a.abs(), expected);
+    }
+
+    #[test]
+    fn abs_f32_with_tail() {
+        // 11 elements: 1 full F32x8 chunk + 3-lane tail
+        let a = vec![-1.0f32, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0, 8.0, -9.0, 10.0, -11.0];
+        assert_eq!(
+            a.abs(),
+            vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+        );
+    }
+
+    #[test]
+    fn abs_f32_negative_zero_becomes_positive_zero() {
+        let a = vec![-0.0f32; 8];
+        for lane in a.abs() {
+            assert_eq!(lane, 0.0f32);
+            assert!(lane.is_sign_positive());
+        }
+    }
+
+    #[test]
+    fn abs_f32_empty() {
+        assert_eq!(Vec::<f32>::new().abs(), vec![]);
+    }
+
+    // ---- acos f32 ------------------------------------------------------------
+
+    #[test]
+    fn acos_f32_of_one_is_zero() {
+        let a = vec![1.0f32; 8];
+        assert!(a.acos().iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn acos_f32_of_neg_one_is_pi() {
+        let a = vec![-1.0f32; 8];
+        let pi = std::f32::consts::PI;
+        assert!(a.acos().iter().all(|&x| (x - pi).abs() < TOL_F32));
+    }
+
+    #[test]
+    fn acos_f32_of_zero_is_pio2() {
+        let a = vec![0.0f32; 8];
+        let pio2 = std::f32::consts::FRAC_PI_2;
+        assert!(a.acos().iter().all(|&x| (x - pio2).abs() < TOL_F32));
+    }
+
+    #[test]
+    fn acos_f32_of_half_is_pi_over_3() {
+        let a = vec![0.5f32; 8];
+        let expected = std::f32::consts::PI / 3.0;
+        assert!(a.acos().iter().all(|&x| (x - expected).abs() < TOL_F32));
+    }
+
+    #[test]
+    fn acos_f32_out_of_domain_is_nan() {
+        let a = vec![1.5f32, -2.0, f32::INFINITY, f32::NAN];
+        assert!(a.acos().iter().all(|x| x.is_nan()));
+    }
+
+    #[test]
+    fn acos_f32_with_tail() {
+        // 11 elements spanning all three computational ranges
+        let inputs = vec![0.0f32, 0.5, -0.5, 0.9, -0.9, 1.0, -1.0, 0.25,
+                          0.75, -0.75, 0.1];
+        let result = inputs.acos();
+        let expected: Vec<f32> = inputs.iter().map(|x| x.acos()).collect();
+        for (r, e) in result.iter().zip(&expected) {
+            if e.is_nan() {
+                assert!(r.is_nan());
+            } else {
+                assert!((r - e).abs() < TOL_F32, "got {r}, expected {e}");
+            }
+        }
+    }
+
+    // ---- abs f64 -------------------------------------------------------------
+
+    #[test]
+    fn abs_f64_positive_unchanged() {
+        let a: Vec<f64> = (1..=8).map(|i| i as f64).collect();
+        assert_eq!(a.abs(), a);
+    }
+
+    #[test]
+    fn abs_f64_negative_become_positive() {
+        let a: Vec<f64> = (1..=8).map(|i| -(i as f64)).collect();
+        let expected: Vec<f64> = (1..=8).map(|i| i as f64).collect();
+        assert_eq!(a.abs(), expected);
+    }
+
+    #[test]
+    fn abs_f64_with_tail() {
+        // 7 elements: 1 full F64x4 chunk + 3-lane tail
+        let a = vec![-1.0f64, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0];
+        assert_eq!(a.abs(), vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn abs_f64_empty() {
+        assert_eq!(Vec::<f64>::new().abs(), vec![]);
+    }
+
+    // ---- acos f64 ------------------------------------------------------------
+
+    #[test]
+    fn acos_f64_of_zero_is_pio2() {
+        let a = vec![0.0f64; 4];
+        let pio2 = std::f64::consts::FRAC_PI_2;
+        assert!(a.acos().iter().all(|&x| (x - pio2).abs() < TOL_F64));
+    }
+
+    #[test]
+    fn acos_f64_of_one_is_zero() {
+        let a = vec![1.0f64; 4];
+        assert!(a.acos().iter().all(|&x| x == 0.0));
+    }
+}
