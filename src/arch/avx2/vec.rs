@@ -6,8 +6,8 @@
 
 use std::arch::x86_64::{_mm256_max_pd, _mm256_max_ps, _mm256_min_pd, _mm256_min_ps};
 
-use crate::arch::avx2::f32x8::{F32x8, LANE_COUNT as F32_LANE_COUNT};
-use crate::arch::avx2::f64x4::{F64x4, LANE_COUNT as F64_LANE_COUNT};
+use crate::arch::avx2::{f32x8, f32x8::F32x8};
+use crate::arch::avx2::{f64x4, f64x4::F64x4};
 use crate::ops::simd::{Load, Store};
 use crate::ops::vec::{binary_op, binary_op_inplace, scalar_op, scalar_op_inplace, VecExt};
 
@@ -22,7 +22,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a + b)
+        binary_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a + b)
     }
 
     #[inline]
@@ -34,7 +34,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a - b)
+        binary_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a - b)
     }
 
     #[inline]
@@ -46,7 +46,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a * b)
+        binary_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a * b)
     }
 
     #[inline]
@@ -58,7 +58,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a / b)
+        binary_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a / b)
     }
 
     #[inline]
@@ -70,27 +70,27 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a % b)
+        binary_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a % b)
     }
 
     #[inline]
     fn add_scalar(&self, rhs: f32) -> Vec<f32> {
-        scalar_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a + b)
+        scalar_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a + b)
     }
 
     #[inline]
     fn sub_scalar(&self, rhs: f32) -> Vec<f32> {
-        scalar_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a - b)
+        scalar_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a - b)
     }
 
     #[inline]
     fn mul_scalar(&self, rhs: f32) -> Vec<f32> {
-        scalar_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a * b)
+        scalar_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a * b)
     }
 
     #[inline]
     fn div_scalar(&self, rhs: f32) -> Vec<f32> {
-        scalar_op::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a / b)
+        scalar_op::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a / b)
     }
 
     #[inline]
@@ -102,7 +102,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a + b);
+        binary_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a + b);
     }
 
     #[inline]
@@ -114,7 +114,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a - b);
+        binary_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a - b);
     }
 
     #[inline]
@@ -126,7 +126,7 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a * b);
+        binary_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a * b);
     }
 
     #[inline]
@@ -138,51 +138,51 @@ impl VecExt<f32> for Vec<f32> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a / b);
+        binary_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a / b);
     }
 
     #[inline]
     fn add_scalar_assign(&mut self, rhs: f32) {
-        scalar_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a + b);
+        scalar_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a + b);
     }
 
     #[inline]
     fn sub_scalar_assign(&mut self, rhs: f32) {
-        scalar_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a - b);
+        scalar_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a - b);
     }
 
     #[inline]
     fn mul_scalar_assign(&mut self, rhs: f32) {
-        scalar_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a * b);
+        scalar_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a * b);
     }
 
     #[inline]
     fn div_scalar_assign(&mut self, rhs: f32) {
-        scalar_op_inplace::<f32, F32x8>(self, rhs, F32_LANE_COUNT, |a, b| a / b);
+        scalar_op_inplace::<f32, F32x8>(self, rhs, f32x8::LANE_COUNT, |a, b| a / b);
     }
 
     fn sum(&self) -> f32 {
         let n = self.len();
-        let full_chunks = n / F32_LANE_COUNT;
-        let tail = n % F32_LANE_COUNT;
+        let full_chunks = n / f32x8::LANE_COUNT;
+        let tail = n % f32x8::LANE_COUNT;
 
         // SAFETY: zero() is always safe.
         let mut acc = unsafe { F32x8::zero() };
 
         for i in 0..full_chunks {
-            let offset = i * F32_LANE_COUNT;
-            // SAFETY: offset + F32_LANE_COUNT <= n.
-            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), F32_LANE_COUNT) };
+            let offset = i * f32x8::LANE_COUNT;
+            // SAFETY: offset + f32x8::LANE_COUNT <= n.
+            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), f32x8::LANE_COUNT) };
             acc += chunk;
         }
 
-        let mut arr = [0.0f32; F32_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F32_LANE_COUNT f32 writes.
+        let mut arr = [0.0f32; f32x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x8::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f32 = arr.iter().copied().sum();
 
         if tail > 0 {
-            let offset = full_chunks * F32_LANE_COUNT;
+            let offset = full_chunks * f32x8::LANE_COUNT;
             for j in 0..tail {
                 result += self[offset + j];
             }
@@ -193,25 +193,25 @@ impl VecExt<f32> for Vec<f32> {
 
     fn product(&self) -> f32 {
         let n = self.len();
-        let full_chunks = n / F32_LANE_COUNT;
-        let tail = n % F32_LANE_COUNT;
+        let full_chunks = n / f32x8::LANE_COUNT;
+        let tail = n % f32x8::LANE_COUNT;
 
         let mut acc = unsafe { F32x8::broadcast(1.0) };
 
         for i in 0..full_chunks {
-            let offset = i * F32_LANE_COUNT;
-            // SAFETY: offset + F32_LANE_COUNT <= n.
-            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), F32_LANE_COUNT) };
+            let offset = i * f32x8::LANE_COUNT;
+            // SAFETY: offset + f32x8::LANE_COUNT <= n.
+            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), f32x8::LANE_COUNT) };
             acc *= chunk;
         }
 
-        let mut arr = [0.0f32; F32_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F32_LANE_COUNT f32 writes.
+        let mut arr = [0.0f32; f32x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x8::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f32 = arr.iter().copied().product();
 
         if tail > 0 {
-            let offset = full_chunks * F32_LANE_COUNT;
+            let offset = full_chunks * f32x8::LANE_COUNT;
             for j in 0..tail {
                 result *= self[offset + j];
             }
@@ -222,29 +222,29 @@ impl VecExt<f32> for Vec<f32> {
 
     fn min(&self) -> f32 {
         let n = self.len();
-        let full_chunks = n / F32_LANE_COUNT;
-        let tail = n % F32_LANE_COUNT;
+        let full_chunks = n / f32x8::LANE_COUNT;
+        let tail = n % f32x8::LANE_COUNT;
 
         let mut acc = unsafe { F32x8::broadcast(f32::INFINITY) };
 
         for i in 0..full_chunks {
-            let offset = i * F32_LANE_COUNT;
-            // SAFETY: offset + F32_LANE_COUNT <= n.
-            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), F32_LANE_COUNT) };
+            let offset = i * f32x8::LANE_COUNT;
+            // SAFETY: offset + f32x8::LANE_COUNT <= n.
+            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), f32x8::LANE_COUNT) };
             // SAFETY: _mm256_min_ps is always safe for valid __m256 operands.
             acc = F32x8 {
-                size: F32_LANE_COUNT,
+                size: f32x8::LANE_COUNT,
                 elements: unsafe { _mm256_min_ps(acc.elements, chunk.elements) },
             };
         }
 
-        let mut arr = [0.0f32; F32_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F32_LANE_COUNT f32 writes.
+        let mut arr = [0.0f32; f32x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x8::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f32::INFINITY, f32::min);
 
         if tail > 0 {
-            let offset = full_chunks * F32_LANE_COUNT;
+            let offset = full_chunks * f32x8::LANE_COUNT;
             for j in 0..tail {
                 result = result.min(self[offset + j]);
             }
@@ -255,29 +255,29 @@ impl VecExt<f32> for Vec<f32> {
 
     fn max(&self) -> f32 {
         let n = self.len();
-        let full_chunks = n / F32_LANE_COUNT;
-        let tail = n % F32_LANE_COUNT;
+        let full_chunks = n / f32x8::LANE_COUNT;
+        let tail = n % f32x8::LANE_COUNT;
 
         let mut acc = unsafe { F32x8::broadcast(f32::NEG_INFINITY) };
 
         for i in 0..full_chunks {
-            let offset = i * F32_LANE_COUNT;
-            // SAFETY: offset + F32_LANE_COUNT <= n.
-            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), F32_LANE_COUNT) };
+            let offset = i * f32x8::LANE_COUNT;
+            // SAFETY: offset + f32x8::LANE_COUNT <= n.
+            let chunk = unsafe { F32x8::load(self.as_ptr().add(offset), f32x8::LANE_COUNT) };
             // SAFETY: _mm256_max_ps is always safe for valid __m256 operands.
             acc = F32x8 {
-                size: F32_LANE_COUNT,
+                size: f32x8::LANE_COUNT,
                 elements: unsafe { _mm256_max_ps(acc.elements, chunk.elements) },
             };
         }
 
-        let mut arr = [0.0f32; F32_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F32_LANE_COUNT f32 writes.
+        let mut arr = [0.0f32; f32x8::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f32x8::LANE_COUNT f32 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
         if tail > 0 {
-            let offset = full_chunks * F32_LANE_COUNT;
+            let offset = full_chunks * f32x8::LANE_COUNT;
             for j in 0..tail {
                 result = result.max(self[offset + j]);
             }
@@ -301,7 +301,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a + b)
+        binary_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a + b)
     }
 
     #[inline]
@@ -313,7 +313,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a - b)
+        binary_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a - b)
     }
 
     #[inline]
@@ -325,7 +325,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a * b)
+        binary_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a * b)
     }
 
     #[inline]
@@ -337,7 +337,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a / b)
+        binary_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a / b)
     }
 
     #[inline]
@@ -349,27 +349,27 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a % b)
+        binary_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a % b)
     }
 
     #[inline]
     fn add_scalar(&self, rhs: f64) -> Vec<f64> {
-        scalar_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a + b)
+        scalar_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a + b)
     }
 
     #[inline]
     fn sub_scalar(&self, rhs: f64) -> Vec<f64> {
-        scalar_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a - b)
+        scalar_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a - b)
     }
 
     #[inline]
     fn mul_scalar(&self, rhs: f64) -> Vec<f64> {
-        scalar_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a * b)
+        scalar_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a * b)
     }
 
     #[inline]
     fn div_scalar(&self, rhs: f64) -> Vec<f64> {
-        scalar_op::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a / b)
+        scalar_op::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a / b)
     }
 
     #[inline]
@@ -381,7 +381,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a + b);
+        binary_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a + b);
     }
 
     #[inline]
@@ -393,7 +393,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a - b);
+        binary_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a - b);
     }
 
     #[inline]
@@ -405,7 +405,7 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a * b);
+        binary_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a * b);
     }
 
     #[inline]
@@ -417,51 +417,51 @@ impl VecExt<f64> for Vec<f64> {
             self.len(),
             rhs.len()
         );
-        binary_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a / b);
+        binary_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a / b);
     }
 
     #[inline]
     fn add_scalar_assign(&mut self, rhs: f64) {
-        scalar_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a + b);
+        scalar_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a + b);
     }
 
     #[inline]
     fn sub_scalar_assign(&mut self, rhs: f64) {
-        scalar_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a - b);
+        scalar_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a - b);
     }
 
     #[inline]
     fn mul_scalar_assign(&mut self, rhs: f64) {
-        scalar_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a * b);
+        scalar_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a * b);
     }
 
     #[inline]
     fn div_scalar_assign(&mut self, rhs: f64) {
-        scalar_op_inplace::<f64, F64x4>(self, rhs, F64_LANE_COUNT, |a, b| a / b);
+        scalar_op_inplace::<f64, F64x4>(self, rhs, f64x4::LANE_COUNT, |a, b| a / b);
     }
 
     fn sum(&self) -> f64 {
         let n = self.len();
-        let full_chunks = n / F64_LANE_COUNT;
-        let tail = n % F64_LANE_COUNT;
+        let full_chunks = n / f64x4::LANE_COUNT;
+        let tail = n % f64x4::LANE_COUNT;
 
         // SAFETY: zero() is always safe.
         let mut acc = unsafe { F64x4::zero() };
 
         for i in 0..full_chunks {
-            let offset = i * F64_LANE_COUNT;
-            // SAFETY: offset + F64_LANE_COUNT <= n.
-            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), F64_LANE_COUNT) };
+            let offset = i * f64x4::LANE_COUNT;
+            // SAFETY: offset + f64x4::LANE_COUNT <= n.
+            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), f64x4::LANE_COUNT) };
             acc += chunk;
         }
 
-        let mut arr = [0.0f64; F64_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F64_LANE_COUNT f64 writes.
+        let mut arr = [0.0f64; f64x4::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x4::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f64 = arr.iter().copied().sum();
 
         if tail > 0 {
-            let offset = full_chunks * F64_LANE_COUNT;
+            let offset = full_chunks * f64x4::LANE_COUNT;
             for j in 0..tail {
                 result += self[offset + j];
             }
@@ -472,25 +472,25 @@ impl VecExt<f64> for Vec<f64> {
 
     fn product(&self) -> f64 {
         let n = self.len();
-        let full_chunks = n / F64_LANE_COUNT;
-        let tail = n % F64_LANE_COUNT;
+        let full_chunks = n / f64x4::LANE_COUNT;
+        let tail = n % f64x4::LANE_COUNT;
 
         let mut acc = unsafe { F64x4::broadcast(1.0) };
 
         for i in 0..full_chunks {
-            let offset = i * F64_LANE_COUNT;
-            // SAFETY: offset + F64_LANE_COUNT <= n.
-            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), F64_LANE_COUNT) };
+            let offset = i * f64x4::LANE_COUNT;
+            // SAFETY: offset + f64x4::LANE_COUNT <= n.
+            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), f64x4::LANE_COUNT) };
             acc *= chunk;
         }
 
-        let mut arr = [0.0f64; F64_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F64_LANE_COUNT f64 writes.
+        let mut arr = [0.0f64; f64x4::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x4::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result: f64 = arr.iter().copied().product();
 
         if tail > 0 {
-            let offset = full_chunks * F64_LANE_COUNT;
+            let offset = full_chunks * f64x4::LANE_COUNT;
             for j in 0..tail {
                 result *= self[offset + j];
             }
@@ -501,29 +501,29 @@ impl VecExt<f64> for Vec<f64> {
 
     fn min(&self) -> f64 {
         let n = self.len();
-        let full_chunks = n / F64_LANE_COUNT;
-        let tail = n % F64_LANE_COUNT;
+        let full_chunks = n / f64x4::LANE_COUNT;
+        let tail = n % f64x4::LANE_COUNT;
 
         let mut acc = unsafe { F64x4::broadcast(f64::INFINITY) };
 
         for i in 0..full_chunks {
-            let offset = i * F64_LANE_COUNT;
-            // SAFETY: offset + F64_LANE_COUNT <= n.
-            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), F64_LANE_COUNT) };
+            let offset = i * f64x4::LANE_COUNT;
+            // SAFETY: offset + f64x4::LANE_COUNT <= n.
+            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), f64x4::LANE_COUNT) };
             // SAFETY: _mm256_min_pd is always safe for valid __m256d operands.
             acc = F64x4 {
-                size: F64_LANE_COUNT,
+                size: f64x4::LANE_COUNT,
                 elements: unsafe { _mm256_min_pd(acc.elements, chunk.elements) },
             };
         }
 
-        let mut arr = [0.0f64; F64_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F64_LANE_COUNT f64 writes.
+        let mut arr = [0.0f64; f64x4::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x4::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f64::INFINITY, f64::min);
 
         if tail > 0 {
-            let offset = full_chunks * F64_LANE_COUNT;
+            let offset = full_chunks * f64x4::LANE_COUNT;
             for j in 0..tail {
                 result = result.min(self[offset + j]);
             }
@@ -534,29 +534,29 @@ impl VecExt<f64> for Vec<f64> {
 
     fn max(&self) -> f64 {
         let n = self.len();
-        let full_chunks = n / F64_LANE_COUNT;
-        let tail = n % F64_LANE_COUNT;
+        let full_chunks = n / f64x4::LANE_COUNT;
+        let tail = n % f64x4::LANE_COUNT;
 
         let mut acc = unsafe { F64x4::broadcast(f64::NEG_INFINITY) };
 
         for i in 0..full_chunks {
-            let offset = i * F64_LANE_COUNT;
-            // SAFETY: offset + F64_LANE_COUNT <= n.
-            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), F64_LANE_COUNT) };
+            let offset = i * f64x4::LANE_COUNT;
+            // SAFETY: offset + f64x4::LANE_COUNT <= n.
+            let chunk = unsafe { F64x4::load(self.as_ptr().add(offset), f64x4::LANE_COUNT) };
             // SAFETY: _mm256_max_pd is always safe for valid __m256d operands.
             acc = F64x4 {
-                size: F64_LANE_COUNT,
+                size: f64x4::LANE_COUNT,
                 elements: unsafe { _mm256_max_pd(acc.elements, chunk.elements) },
             };
         }
 
-        let mut arr = [0.0f64; F64_LANE_COUNT];
-        // SAFETY: `arr` is mut and valid for F64_LANE_COUNT f64 writes.
+        let mut arr = [0.0f64; f64x4::LANE_COUNT];
+        // SAFETY: `arr` is mut and valid for f64x4::LANE_COUNT f64 writes.
         unsafe { acc.store_unaligned_at(arr.as_mut_ptr()) };
         let mut result = arr.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
         if tail > 0 {
-            let offset = full_chunks * F64_LANE_COUNT;
+            let offset = full_chunks * f64x4::LANE_COUNT;
             for j in 0..tail {
                 result = result.max(self[offset + j]);
             }
