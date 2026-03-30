@@ -1,0 +1,5 @@
+[build]
+# Compile for the current machine's CPU, enabling all available SIMD features
+# (AVX2, AVX-512, NEON, etc.) automatically. This drives the compile-time
+# dispatch in src/arch/mod.rs without requiring explicit RUSTFLAGS on each command.
+rustflags = ["-C", "target-cpu=native"]
