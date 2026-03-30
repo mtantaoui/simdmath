@@ -100,6 +100,19 @@ pub(crate) trait Load<T> {
     /// - `ptr` must be non-null and valid for at least `size` element reads.
     /// - `size` must be strictly less than the lane count of the implementing type.
     unsafe fn load_partial(ptr: *const T, size: usize) -> Self::Output;
+
+    /// Broadcasts `val` to every lane, with `size = LANE_COUNT` active lanes.
+    /// Wraps `_mm256_set1_ps`, `_mm256_set1_pd`, etc.
+    ///
+    /// # Safety
+    /// No preconditions beyond a valid `val`.
+    unsafe fn broadcast(val: T) -> Self::Output;
+
+    /// Returns a zeroed register with all lanes set to `0` and `size = LANE_COUNT`.
+    /// Wraps `_mm256_setzero_ps`, `_mm256_setzero_pd`, etc.
+    ///
+    /// Used to initialise accumulators for sum reductions.
+    unsafe fn zero() -> Self::Output;
 }
 
 /// Writing a SIMD register back to memory.
@@ -323,4 +336,3 @@ pub(crate) trait Math {
     /// On AVX2 + FMA this maps directly to `_mm256_fmadd_ps` / `_mm256_fmadd_pd`.
     fn par_fma(&self, multiplier: Self, multiplicand: Self) -> Self::Output;
 }
-

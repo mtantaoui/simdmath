@@ -30,6 +30,7 @@ pub(crate) use neon as current;
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub(crate) use scalar as current;
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub(crate) mod avx2;
 pub(crate) mod avx512;
 pub(crate) mod neon;

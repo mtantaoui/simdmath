@@ -15,8 +15,8 @@ use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 use std::ops::{
-    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, DivAssign, Mul, MulAssign,
-    Rem, RemAssign, Sub, SubAssign,
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, DivAssign, Mul, MulAssign, Rem,
+    RemAssign, Sub, SubAssign,
 };
 
 use crate::ops::simd::{Align, Load, Store};
@@ -122,6 +122,30 @@ impl Load<f32> for F32x8 {
             size,
         }
     }
+
+    /// Broadcasts `val` to every lane of a new `F32x8` register.
+    ///
+    /// Wraps `_mm256_set1_ps`. All 8 lanes receive `val`; `size` is set to
+    /// [`LANE_COUNT`] since all lanes are active.
+    #[inline]
+    unsafe fn broadcast(val: f32) -> Self::Output {
+        Self {
+            size: LANE_COUNT,
+            elements: unsafe { _mm256_set1_ps(val) },
+        }
+    }
+
+    /// Returns a zeroed `F32x8` register (`_mm256_setzero_ps`).
+    ///
+    /// All 8 lanes are set to `0.0` and `size` is set to [`LANE_COUNT`].
+    /// Used to initialise the accumulator in sum reductions.
+    #[inline]
+    unsafe fn zero() -> Self::Output {
+        Self {
+            size: LANE_COUNT,
+            elements: unsafe { _mm256_setzero_ps() },
+        }
+    }
 }
 
 impl Store<f32> for F32x8 {
@@ -197,8 +221,6 @@ impl Store<f32> for F32x8 {
     }
 }
 
-impl F32x8 {}
-
 /// Element-wise addition of two [`F32x8`] vectors (`_mm256_add_ps`).
 ///
 /// Inactive lanes (when `size < LANE_COUNT`) are still added, but since they
@@ -209,13 +231,6 @@ impl Add for F32x8 {
 
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        debug_assert!(
-            self.size == rhs.size,
-            "mismatched lane counts: lhs has {} lanes, rhs has {} lanes",
-            self.size,
-            rhs.size
-        );
-
         Self {
             size: self.size,
             elements: unsafe { _mm256_add_ps(self.elements, rhs.elements) },
@@ -237,13 +252,6 @@ impl Sub for F32x8 {
 
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
-        debug_assert!(
-            self.size == rhs.size,
-            "mismatched lane counts: lhs has {} lanes, rhs has {} lanes",
-            self.size,
-            rhs.size
-        );
-
         Self {
             size: self.size,
             elements: unsafe { _mm256_sub_ps(self.elements, rhs.elements) },
@@ -265,13 +273,6 @@ impl Mul for F32x8 {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        debug_assert!(
-            self.size == rhs.size,
-            "mismatched lane counts: lhs has {} lanes, rhs has {} lanes",
-            self.size,
-            rhs.size
-        );
-
         Self {
             size: self.size,
             elements: unsafe { _mm256_mul_ps(self.elements, rhs.elements) },
@@ -299,13 +300,6 @@ impl Div for F32x8 {
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        debug_assert!(
-            self.size == rhs.size,
-            "mismatched lane counts: lhs has {} lanes, rhs has {} lanes",
-            self.size,
-            rhs.size
-        );
-
         Self {
             size: self.size,
             elements: unsafe { _mm256_div_ps(self.elements, rhs.elements) },
@@ -454,27 +448,23 @@ mod tests {
     use super::*;
 
     /// A 32-byte-aligned buffer of 8 `f32` values, matching `__m256` alignment.
-    #[cfg(target_arch = "x86_64")]
     #[repr(align(32))]
     struct Aligned([f32; 8]);
 
     /// A 32-byte-aligned buffer with one extra slot.
     /// `as_ptr().add(1)` is guaranteed to NOT be 32-byte aligned (base+4 mod 32 ≠ 0),
     /// providing a reliable unaligned pointer for dispatch tests.
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[repr(align(32))]
     struct AlignedBuf([f32; 9]);
 
     // ---- Align ----------------------------------------------------------------
 
-    #[cfg(target_arch = "x86_64")]
     #[test]
     fn is_aligned_returns_true_for_aligned_pointer() {
         let data = Aligned([0.0; 8]);
         assert!(F32x8::is_aligned(data.0.as_ptr()));
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[test]
     fn is_aligned_returns_false_for_unaligned_pointer() {
         let data = Aligned([0.0; 8]);
@@ -485,7 +475,30 @@ mod tests {
 
     // ---- Load -----------------------------------------------------------------
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[test]
+    fn broadcast_fills_all_lanes_with_value() {
+        unsafe {
+            let v = F32x8::broadcast(3.14);
+            assert_eq!(v.size, LANE_COUNT);
+            let mut out = [0.0f32; LANE_COUNT];
+            _mm256_storeu_ps(out.as_mut_ptr(), v.elements);
+            for lane in out {
+                assert!((lane - 3.14f32).abs() < f32::EPSILON);
+            }
+        }
+    }
+
+    #[test]
+    fn zero_produces_all_zero_lanes() {
+        unsafe {
+            let v = F32x8::zero();
+            assert_eq!(v.size, LANE_COUNT);
+            let mut out = [1.0f32; LANE_COUNT];
+            _mm256_storeu_ps(out.as_mut_ptr(), v.elements);
+            assert_eq!(out, [0.0f32; LANE_COUNT]);
+        }
+    }
+
     #[test]
     fn load_aligned_loads_all_lanes() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -498,7 +511,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn load_unaligned_loads_all_lanes() {
         // One extra element at the front so ptr.add(1) is guaranteed unaligned.
@@ -513,7 +525,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn load_dispatches_to_aligned_path() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -530,7 +541,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn load_dispatches_to_unaligned_path() {
         // AlignedBuf is 32-byte aligned; add(1) shifts by 4 bytes, which cannot
@@ -550,7 +560,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn load_partial_loads_n_active_lanes_and_zeros_the_rest() {
         let src = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -572,7 +581,6 @@ mod tests {
 
     // ---- Store ----------------------------------------------------------------
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn store_aligned_writes_all_lanes() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -584,7 +592,6 @@ mod tests {
         assert_eq!(dst.0, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn store_unaligned_writes_all_lanes() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -597,7 +604,6 @@ mod tests {
         assert_eq!(&dst[1..], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn stream_at_writes_all_lanes() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -611,7 +617,6 @@ mod tests {
         assert_eq!(dst.0, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn store_partial_writes_only_active_lanes() {
         let src = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -631,7 +636,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn store_at_partial_writes_active_lanes_after_partial_load() {
         let src = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -644,7 +648,6 @@ mod tests {
         assert_eq!(&dst[3..], &[-1.0; 5]);
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn store_at_dispatches_to_aligned_when_full_and_aligned() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -660,7 +663,6 @@ mod tests {
         assert_eq!(dst.0, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn store_at_dispatches_to_unaligned_when_full_and_unaligned() {
         let src = Aligned([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -680,20 +682,17 @@ mod tests {
     // ---- Arithmetic ops -------------------------------------------------------
 
     /// Helper: load 8 values into an `F32x8` using an unaligned pointer.
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     unsafe fn load_arr(arr: &[f32; 8]) -> F32x8 {
         unsafe { F32x8::load_unaligned(arr.as_ptr()) }
     }
 
     /// Helper: store an `F32x8` into a `[f32; 8]`.
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     unsafe fn store_arr(v: F32x8) -> [f32; 8] {
         let mut out = [0.0f32; 8];
         unsafe { _mm256_storeu_ps(out.as_mut_ptr(), v.elements) };
         out
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn add_computes_element_wise_sum() {
         let a = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -704,7 +703,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn add_assign_matches_add() {
         let a = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -717,7 +715,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn sub_computes_element_wise_difference() {
         let a = [8.0f32, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
@@ -728,7 +725,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn sub_assign_matches_sub() {
         let a = [8.0f32, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
@@ -741,7 +737,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn mul_computes_element_wise_product() {
         let a = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -752,7 +747,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn mul_assign_matches_mul() {
         let a = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -765,7 +759,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn div_computes_element_wise_quotient() {
         let a = [2.0f32, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0];
@@ -776,7 +769,6 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn div_assign_matches_div() {
         let a = [2.0f32, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0];
@@ -789,7 +781,6 @@ mod tests {
         }
     }
 
-
     // ---- Bitwise ops (F32x8) --------------------------------------------------
     //
     // These operate on the raw IEEE 754 bit patterns of each f32 lane.
@@ -798,8 +789,6 @@ mod tests {
     //   x & -0.0 == 0.0 for any positive x  (clears all but the sign bit, giving +0.0)
     //   x | -0.0 == -x for any positive x   (sets the sign bit, negating the value)
 
-
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn bitand_assign_matches_bitand() {
         let a = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -812,8 +801,6 @@ mod tests {
         }
     }
 
-
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn bitor_assign_matches_bitor() {
         let a = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -826,8 +813,6 @@ mod tests {
         }
     }
 
-
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     #[test]
     fn rem_negative_value_is_negative() {
         // -7.0 % 3.0 == -1.0 (truncation semantics), NOT 2.0 (floor semantics).
@@ -850,7 +835,4 @@ mod tests {
             }
         }
     }
-
-
 }
-
