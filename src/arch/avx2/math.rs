@@ -65,7 +65,10 @@ mod tests {
     #[test]
     fn f32x8_abs_clears_sign() {
         unsafe {
-            let v = F32x8 { size: 8, elements: _mm256_set_ps(-8.0, 7.0, -6.0, 5.0, -4.0, 3.0, -2.0, 1.0) };
+            let v = F32x8 {
+                size: 8,
+                elements: _mm256_set_ps(-8.0, 7.0, -6.0, 5.0, -4.0, 3.0, -2.0, 1.0),
+            };
             let mut out = [0.0f32; 8];
             _mm256_storeu_ps(out.as_mut_ptr(), v.abs().elements);
             assert_eq!(out, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -75,7 +78,10 @@ mod tests {
     #[test]
     fn f32x8_acos_of_one_is_zero() {
         unsafe {
-            let v = F32x8 { size: 8, elements: _mm256_set1_ps(1.0) };
+            let v = F32x8 {
+                size: 8,
+                elements: _mm256_set1_ps(1.0),
+            };
             let mut out = [0.0f32; 8];
             _mm256_storeu_ps(out.as_mut_ptr(), v.acos().elements);
             assert!(out.iter().all(|&x| x == 0.0));
@@ -85,7 +91,10 @@ mod tests {
     #[test]
     fn f32x8_acos_of_neg_one_is_pi() {
         unsafe {
-            let v = F32x8 { size: 8, elements: _mm256_set1_ps(-1.0) };
+            let v = F32x8 {
+                size: 8,
+                elements: _mm256_set1_ps(-1.0),
+            };
             let mut out = [0.0f32; 8];
             _mm256_storeu_ps(out.as_mut_ptr(), v.acos().elements);
             let pi = std::f32::consts::PI;
@@ -98,7 +107,10 @@ mod tests {
     #[test]
     fn f64x4_abs_clears_sign() {
         unsafe {
-            let v = F64x4 { size: 4, elements: _mm256_set_pd(-4.0, 3.0, -2.0, 1.0) };
+            let v = F64x4 {
+                size: 4,
+                elements: _mm256_set_pd(-4.0, 3.0, -2.0, 1.0),
+            };
             let mut out = [0.0f64; 4];
             _mm256_storeu_pd(out.as_mut_ptr(), v.abs().elements);
             assert_eq!(out, [1.0, 2.0, 3.0, 4.0]);
@@ -108,7 +120,10 @@ mod tests {
     #[test]
     fn f64x4_acos_of_zero_is_pio2() {
         unsafe {
-            let v = F64x4 { size: 4, elements: _mm256_set1_pd(0.0) };
+            let v = F64x4 {
+                size: 4,
+                elements: _mm256_set1_pd(0.0),
+            };
             let mut out = [0.0f64; 4];
             _mm256_storeu_pd(out.as_mut_ptr(), v.acos().elements);
             let pio2 = std::f64::consts::FRAC_PI_2;

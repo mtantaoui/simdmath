@@ -370,11 +370,7 @@ pub(crate) fn scalar_op_inplace<T, S>(
 /// Applies a unary `op` element-wise to `lhs`, writing results into a freshly
 /// allocated `Vec`. Used for operations like `abs` that take a single operand.
 #[inline]
-pub(crate) fn unary_op<T, S>(
-    lhs: &[T],
-    lane_count: usize,
-    op: impl Fn(S) -> S,
-) -> Vec<T>
+pub(crate) fn unary_op<T, S>(lhs: &[T], lane_count: usize, op: impl Fn(S) -> S) -> Vec<T>
 where
     T: Copy,
     S: Load<T, Output = S> + Store<T> + Copy,

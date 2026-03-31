@@ -67,7 +67,9 @@ mod tests {
     #[test]
     fn abs_f32_with_tail() {
         // 11 elements: 1 full F32x8 chunk + 3-lane tail
-        let a = vec![-1.0f32, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0, 8.0, -9.0, 10.0, -11.0];
+        let a = vec![
+            -1.0f32, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0, 8.0, -9.0, 10.0, -11.0,
+        ];
         assert_eq!(
             a.abs(),
             vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
@@ -126,8 +128,9 @@ mod tests {
     #[test]
     fn acos_f32_with_tail() {
         // 11 elements spanning all three computational ranges
-        let inputs = vec![0.0f32, 0.5, -0.5, 0.9, -0.9, 1.0, -1.0, 0.25,
-                          0.75, -0.75, 0.1];
+        let inputs = vec![
+            0.0f32, 0.5, -0.5, 0.9, -0.9, 1.0, -1.0, 0.25, 0.75, -0.75, 0.1,
+        ];
         let result = inputs.acos();
         let expected: Vec<f32> = inputs.iter().map(|x| x.acos()).collect();
         for (r, e) in result.iter().zip(&expected) {

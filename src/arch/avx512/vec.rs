@@ -9,7 +9,7 @@ use std::arch::x86_64::{_mm512_max_pd, _mm512_max_ps, _mm512_min_pd, _mm512_min_
 use crate::arch::avx512::{f32x16, f32x16::F32x16};
 use crate::arch::avx512::{f64x8, f64x8::F64x8};
 use crate::ops::simd::{Load, Store};
-use crate::ops::vec::{binary_op, binary_op_inplace, scalar_op, scalar_op_inplace, VecExt};
+use crate::ops::vec::{VecExt, binary_op, binary_op_inplace, scalar_op, scalar_op_inplace};
 
 impl VecExt<f32> for Vec<f32> {
     #[inline]
@@ -286,8 +286,8 @@ mod tests {
     }
 
     // Use sizes that hit: exactly one register (16), no tail; and a tail case.
-    const N_FULL: usize = 32;   // 2 full F32x16 chunks, no tail
-    const N_TAIL: usize = 19;   // 1 full chunk + 3-lane tail
+    const N_FULL: usize = 32; // 2 full F32x16 chunks, no tail
+    const N_TAIL: usize = 19; // 1 full chunk + 3-lane tail
 
     #[test]
     fn add_produces_correct_result() {
@@ -384,7 +384,10 @@ mod tests {
         let (a, _) = make_vecs(N_FULL);
         let result = a.sum();
         let expected: f32 = a.iter().sum();
-        assert!((result - expected).abs() < 1e-2, "expected {expected}, got {result}");
+        assert!(
+            (result - expected).abs() < 1e-2,
+            "expected {expected}, got {result}"
+        );
     }
 
     #[test]
@@ -392,7 +395,10 @@ mod tests {
         let (a, _) = make_vecs(N_TAIL);
         let result = a.sum();
         let expected: f32 = a.iter().sum();
-        assert!((result - expected).abs() < 1e-2, "expected {expected}, got {result}");
+        assert!(
+            (result - expected).abs() < 1e-2,
+            "expected {expected}, got {result}"
+        );
     }
 
     #[test]
@@ -442,31 +448,61 @@ mod tests {
 impl VecExt<f64> for Vec<f64> {
     #[inline]
     fn add(&self, rhs: &Self) -> Vec<f64> {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a + b)
     }
 
     #[inline]
     fn sub(&self, rhs: &Self) -> Vec<f64> {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a - b)
     }
 
     #[inline]
     fn mul(&self, rhs: &Self) -> Vec<f64> {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a * b)
     }
 
     #[inline]
     fn div(&self, rhs: &Self) -> Vec<f64> {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a / b)
     }
 
     #[inline]
     fn rem(&self, rhs: &Self) -> Vec<f64> {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a % b)
     }
 
@@ -492,25 +528,49 @@ impl VecExt<f64> for Vec<f64> {
 
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op_inplace::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a + b);
     }
 
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op_inplace::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a - b);
     }
 
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op_inplace::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a * b);
     }
 
     #[inline]
     fn div_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.len(), rhs.len(), "length mismatch: lhs has {} elements, rhs has {} elements", self.len(), rhs.len());
+        assert_eq!(
+            self.len(),
+            rhs.len(),
+            "length mismatch: lhs has {} elements, rhs has {} elements",
+            self.len(),
+            rhs.len()
+        );
         binary_op_inplace::<f64, F64x8>(self, rhs, f64x8::LANE_COUNT, |a, b| a / b);
     }
 
@@ -659,8 +719,8 @@ mod tests_f64 {
         (a, b)
     }
 
-    const N_FULL: usize = 16;  // 2 full F64x8 chunks, no tail
-    const N_TAIL: usize = 11;  // 1 full chunk + 3-lane tail
+    const N_FULL: usize = 16; // 2 full F64x8 chunks, no tail
+    const N_TAIL: usize = 11; // 1 full chunk + 3-lane tail
 
     #[test]
     fn add_produces_correct_result() {
@@ -741,7 +801,10 @@ mod tests_f64 {
         let (a, _) = make_vecs(N_FULL);
         let result = a.sum();
         let expected: f64 = a.iter().sum();
-        assert!((result - expected).abs() < 1e-6, "expected {expected}, got {result}");
+        assert!(
+            (result - expected).abs() < 1e-6,
+            "expected {expected}, got {result}"
+        );
     }
 
     #[test]
@@ -749,7 +812,10 @@ mod tests_f64 {
         let (a, _) = make_vecs(N_TAIL);
         let result = a.sum();
         let expected: f64 = a.iter().sum();
-        assert!((result - expected).abs() < 1e-6, "expected {expected}, got {result}");
+        assert!(
+            (result - expected).abs() < 1e-6,
+            "expected {expected}, got {result}"
+        );
     }
 
     #[test]
