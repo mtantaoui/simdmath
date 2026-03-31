@@ -4,9 +4,9 @@
 //! same algorithm as the AVX2 version: a branchless, three-range minimax
 //! rational approximation ported from musl libc's `acosf.c` and `acos.c`.
 //!
-//! AVX-512 provides masked operations which could enable more efficient
-//! blending, but we use the same branchless approach as AVX2 for simplicity
-//! and to maintain ≤1 ULP accuracy.
+//! # Precision
+//!
+//! Both implementations achieve **≤ 1 ULP** accuracy across the entire domain `[-1, 1]`.
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -25,11 +25,18 @@ use crate::arch::consts::acos::{
 
 /// Computes `acos(x)` for each lane of an AVX-512 `__m512` register.
 ///
+/// # Precision
+///
+/// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
+///
+/// # Description
+///
 /// All 16 lanes are processed simultaneously without branches. The result
 /// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
 /// are computed unconditionally and merged with mask operations.
 ///
 /// # Safety
+///
 /// `x` must be a valid `__m512` register. No alignment or memory constraints.
 #[inline]
 pub(crate) unsafe fn _mm512_acos_ps(x: __m512) -> __m512 {
@@ -138,11 +145,18 @@ pub(crate) unsafe fn _mm512_acos_ps(x: __m512) -> __m512 {
 
 /// Computes `acos(x)` for each lane of an AVX-512 `__m512d` register.
 ///
+/// # Precision
+///
+/// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
+///
+/// # Description
+///
 /// All 8 lanes are processed simultaneously without branches. The result
 /// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
 /// are computed unconditionally and merged with mask operations.
 ///
 /// # Safety
+///
 /// `x` must be a valid `__m512d` register. No alignment or memory constraints.
 #[inline]
 pub(crate) unsafe fn _mm512_acos_pd(x: __m512d) -> __m512d {

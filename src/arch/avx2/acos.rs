@@ -72,11 +72,18 @@ use crate::arch::consts::acos::{
 
 /// Computes `acos(x)` for each lane of an AVX2 `__m256` register.
 ///
+/// # Precision
+///
+/// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
+///
+/// # Description
+///
 /// All 8 lanes are processed simultaneously without branches. The result
 /// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
 /// are computed unconditionally and merged with `_mm256_blendv_ps`.
 ///
 /// # Safety
+///
 /// `x` must be a valid `__m256` register. No alignment or memory constraints.
 #[inline]
 pub(crate) unsafe fn _mm256_acos_ps(x: __m256) -> __m256 {
@@ -231,11 +238,18 @@ pub(crate) unsafe fn _mm256_acos_ps(x: __m256) -> __m256 {
 
 /// Computes `acos(x)` for each lane of an AVX2 `__m256d` register.
 ///
+/// # Precision
+///
+/// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
+///
+/// # Description
+///
 /// All 4 lanes are processed simultaneously without branches. The result
 /// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
 /// are computed unconditionally and merged with `_mm256_blendv_pd`.
 ///
 /// # Safety
+///
 /// `x` must be a valid `__m256d` register. No alignment or memory constraints.
 #[inline]
 pub(crate) unsafe fn _mm256_acos_pd(x: __m256d) -> __m256d {
