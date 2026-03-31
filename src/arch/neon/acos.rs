@@ -248,7 +248,10 @@ pub(crate) unsafe fn vacos_f64(x: float64x2_t) -> float64x2_t {
 
         // Lanes with x in (-1, -0.5]: x is negative AND |x| >= 0.5.
         // ~is_abs_lt_half & is_x_neg
-        let is_x_neg_large = vandq_u64(vmvnq_u64(is_abs_lt_half), is_x_neg);
+        // Note: NEON lacks vmvnq_u64, so we emulate NOT with XOR against all-ones
+        let all_ones = vreinterpretq_u64_s64(vdupq_n_s64(-1));
+        let not_abs_lt_half = veorq_u64(is_abs_lt_half, all_ones);
+        let is_x_neg_large = vandq_u64(not_abs_lt_half, is_x_neg);
 
         // -------------------------------------------------------------------------
         // Case A — |x| == 1  (exact boundary values)
