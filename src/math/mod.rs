@@ -61,6 +61,22 @@ pub trait VecMath<T> {
     /// // r ≈ [0.0, π/2, π, π/3]
     /// ```
     fn acos(&self) -> Self;
+
+    /// Returns the arc sine (in radians) of every element.
+    ///
+    /// Computed via a two-range minimax rational approximation (≤ 1 ULP).
+    /// The domain is `[-1, 1]`; values outside this range and `NaN` inputs
+    /// produce `NaN` in the corresponding lane.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![0.0f32, 0.5, -0.5, 1.0];
+    /// let r = a.asin();
+    /// // r ≈ [0.0, π/6, -π/6, π/2]
+    /// ```
+    fn asin(&self) -> Self;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,3 +92,6 @@ mod avx2;
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 mod avx512;
+
+#[cfg(target_arch = "aarch64")]
+mod neon;

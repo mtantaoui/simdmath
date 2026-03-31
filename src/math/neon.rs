@@ -1,64 +1,64 @@
-//! AVX2 `Vec<T>` implementations of [`VecMath`].
+//! NEON `Vec<T>` implementations of [`VecMath`].
 //!
-//! Each method uses [`unary_op`] to partition the slice into `F32x8` / `F64x4`
+//! Each method uses [`unary_op`] to partition the slice into `F32x4` / `F64x2`
 //! chunks and applies the corresponding register-level [`VecMath`] method.
 //! The tail (when `len % LANE_COUNT != 0`) is handled automatically by
 //! `unary_op` via a masked load/store.
 
-use crate::arch::avx2::{f32x8, f32x8::F32x8};
-use crate::arch::avx2::{f64x4, f64x4::F64x4};
+use crate::arch::neon::{f32x4, f32x4::F32x4};
+use crate::arch::neon::{f64x2, f64x2::F64x2};
 use crate::math::VecMath;
 use crate::ops::vec::unary_op;
 
 impl VecMath<f32> for Vec<f32> {
-    /// Absolute value of every element, processed 8 lanes at a time via AVX2.
+    /// Absolute value of every element, processed 4 lanes at a time via NEON.
     #[inline]
     fn abs(&self) -> Vec<f32> {
-        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.abs())
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.abs())
     }
 
-    /// Arc cosine of every element, processed 8 lanes at a time via AVX2.
+    /// Arc cosine of every element, processed 4 lanes at a time via NEON.
     ///
     /// Uses the three-range minimax rational approximation in
-    /// [`crate::arch::avx2::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
+    /// [`crate::arch::neon::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
     #[inline]
     fn acos(&self) -> Vec<f32> {
-        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.acos())
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.acos())
     }
 
-    /// Arc sine of every element, processed 8 lanes at a time via AVX2.
+    /// Arc sine of every element, processed 4 lanes at a time via NEON.
     ///
     /// Uses the two-range minimax rational approximation in
-    /// [`crate::arch::avx2::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
+    /// [`crate::arch::neon::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
     #[inline]
     fn asin(&self) -> Vec<f32> {
-        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.asin())
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.asin())
     }
 }
 
 impl VecMath<f64> for Vec<f64> {
-    /// Absolute value of every element, processed 4 lanes at a time via AVX2.
+    /// Absolute value of every element, processed 2 lanes at a time via NEON.
     #[inline]
     fn abs(&self) -> Vec<f64> {
-        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.abs())
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.abs())
     }
 
-    /// Arc cosine of every element, processed 4 lanes at a time via AVX2.
+    /// Arc cosine of every element, processed 2 lanes at a time via NEON.
     ///
     /// Uses the three-range minimax rational approximation in
-    /// [`crate::arch::avx2::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
+    /// [`crate::arch::neon::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
     #[inline]
     fn acos(&self) -> Vec<f64> {
-        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.acos())
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.acos())
     }
 
-    /// Arc sine of every element, processed 4 lanes at a time via AVX2.
+    /// Arc sine of every element, processed 2 lanes at a time via NEON.
     ///
     /// Uses the two-range minimax rational approximation in
-    /// [`crate::arch::avx2::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
+    /// [`crate::arch::neon::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
     #[inline]
     fn asin(&self) -> Vec<f64> {
-        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.asin())
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.asin())
     }
 }
 
@@ -86,19 +86,14 @@ mod tests {
 
     #[test]
     fn abs_f32_with_tail() {
-        // 11 elements: 1 full F32x8 chunk + 3-lane tail
-        let a = vec![
-            -1.0f32, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0, 8.0, -9.0, 10.0, -11.0,
-        ];
-        assert_eq!(
-            a.abs(),
-            vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
-        );
+        // 7 elements: 1 full F32x4 chunk + 3-lane tail
+        let a = vec![-1.0f32, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0];
+        assert_eq!(a.abs(), vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
     }
 
     #[test]
     fn abs_f32_negative_zero_becomes_positive_zero() {
-        let a = vec![-0.0f32; 8];
+        let a = vec![-0.0f32; 4];
         for lane in a.abs() {
             assert_eq!(lane, 0.0f32);
             assert!(lane.is_sign_positive());
@@ -114,27 +109,27 @@ mod tests {
 
     #[test]
     fn acos_f32_of_one_is_zero() {
-        let a = vec![1.0f32; 8];
+        let a = vec![1.0f32; 4];
         assert!(a.acos().iter().all(|&x| x == 0.0));
     }
 
     #[test]
     fn acos_f32_of_neg_one_is_pi() {
-        let a = vec![-1.0f32; 8];
+        let a = vec![-1.0f32; 4];
         let pi = std::f32::consts::PI;
         assert!(a.acos().iter().all(|&x| (x - pi).abs() < TOL_F32));
     }
 
     #[test]
     fn acos_f32_of_zero_is_pio2() {
-        let a = vec![0.0f32; 8];
+        let a = vec![0.0f32; 4];
         let pio2 = std::f32::consts::FRAC_PI_2;
         assert!(a.acos().iter().all(|&x| (x - pio2).abs() < TOL_F32));
     }
 
     #[test]
     fn acos_f32_of_half_is_pi_over_3() {
-        let a = vec![0.5f32; 8];
+        let a = vec![0.5f32; 4];
         let expected = std::f32::consts::PI / 3.0;
         assert!(a.acos().iter().all(|&x| (x - expected).abs() < TOL_F32));
     }
@@ -147,10 +142,8 @@ mod tests {
 
     #[test]
     fn acos_f32_with_tail() {
-        // 11 elements spanning all three computational ranges
-        let inputs = vec![
-            0.0f32, 0.5, -0.5, 0.9, -0.9, 1.0, -1.0, 0.25, 0.75, -0.75, 0.1,
-        ];
+        // 7 elements spanning all three computational ranges
+        let inputs = vec![0.0f32, 0.5, -0.5, 0.9, -0.9, 1.0, -1.0];
         let result = inputs.acos();
         let expected: Vec<f32> = inputs.iter().map(|x| x.acos()).collect();
         for (r, e) in result.iter().zip(&expected) {
@@ -160,6 +153,34 @@ mod tests {
                 assert!((r - e).abs() < TOL_F32, "got {r}, expected {e}");
             }
         }
+    }
+
+    // ---- asin f32 ------------------------------------------------------------
+
+    #[test]
+    fn asin_f32_of_zero_is_zero() {
+        let a = vec![0.0f32; 4];
+        assert!(a.asin().iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn asin_f32_of_one_is_pio2() {
+        let a = vec![1.0f32; 4];
+        let pio2 = std::f32::consts::FRAC_PI_2;
+        assert!(a.asin().iter().all(|&x| (x - pio2).abs() < TOL_F32));
+    }
+
+    #[test]
+    fn asin_f32_of_neg_one_is_neg_pio2() {
+        let a = vec![-1.0f32; 4];
+        let neg_pio2 = -std::f32::consts::FRAC_PI_2;
+        assert!(a.asin().iter().all(|&x| (x - neg_pio2).abs() < TOL_F32));
+    }
+
+    #[test]
+    fn asin_f32_out_of_domain_is_nan() {
+        let a = vec![1.5f32, -2.0, f32::INFINITY, f32::NAN];
+        assert!(a.asin().iter().all(|x| x.is_nan()));
     }
 
     // ---- abs f64 -------------------------------------------------------------
@@ -179,9 +200,9 @@ mod tests {
 
     #[test]
     fn abs_f64_with_tail() {
-        // 7 elements: 1 full F64x4 chunk + 3-lane tail
-        let a = vec![-1.0f64, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0];
-        assert_eq!(a.abs(), vec![1.0f64, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
+        // 3 elements: 1 full F64x2 chunk + 1-lane tail
+        let a = vec![-1.0f64, 2.0, -3.0];
+        assert_eq!(a.abs(), vec![1.0f64, 2.0, 3.0]);
     }
 
     #[test]
@@ -193,14 +214,29 @@ mod tests {
 
     #[test]
     fn acos_f64_of_zero_is_pio2() {
-        let a = vec![0.0f64; 4];
+        let a = vec![0.0f64; 2];
         let pio2 = std::f64::consts::FRAC_PI_2;
         assert!(a.acos().iter().all(|&x| (x - pio2).abs() < TOL_F64));
     }
 
     #[test]
     fn acos_f64_of_one_is_zero() {
-        let a = vec![1.0f64; 4];
+        let a = vec![1.0f64; 2];
         assert!(a.acos().iter().all(|&x| x == 0.0));
+    }
+
+    // ---- asin f64 ------------------------------------------------------------
+
+    #[test]
+    fn asin_f64_of_zero_is_zero() {
+        let a = vec![0.0f64; 2];
+        assert!(a.asin().iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn asin_f64_of_one_is_pio2() {
+        let a = vec![1.0f64; 2];
+        let pio2 = std::f64::consts::FRAC_PI_2;
+        assert!(a.asin().iter().all(|&x| (x - pio2).abs() < TOL_F64));
     }
 }

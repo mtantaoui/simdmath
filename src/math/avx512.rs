@@ -6,26 +6,54 @@ use crate::math::VecMath;
 use crate::ops::vec::unary_op;
 
 impl VecMath<f32> for Vec<f32> {
+    /// Absolute value of every element, processed 16 lanes at a time via AVX-512.
     #[inline]
     fn abs(&self) -> Vec<f32> {
         unary_op::<f32, F32x16>(self, f32x16::LANE_COUNT, |v| v.abs())
     }
 
+    /// Arc cosine of every element, processed 16 lanes at a time via AVX-512.
+    ///
+    /// Uses the three-range minimax rational approximation in
+    /// [`crate::arch::avx512::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
     #[inline]
     fn acos(&self) -> Vec<f32> {
         unary_op::<f32, F32x16>(self, f32x16::LANE_COUNT, |v| v.acos())
     }
+
+    /// Arc sine of every element, processed 16 lanes at a time via AVX-512.
+    ///
+    /// Uses the two-range minimax rational approximation in
+    /// [`crate::arch::avx512::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
+    #[inline]
+    fn asin(&self) -> Vec<f32> {
+        unary_op::<f32, F32x16>(self, f32x16::LANE_COUNT, |v| v.asin())
+    }
 }
 
 impl VecMath<f64> for Vec<f64> {
+    /// Absolute value of every element, processed 8 lanes at a time via AVX-512.
     #[inline]
     fn abs(&self) -> Vec<f64> {
         unary_op::<f64, F64x8>(self, f64x8::LANE_COUNT, |v| v.abs())
     }
 
+    /// Arc cosine of every element, processed 8 lanes at a time via AVX-512.
+    ///
+    /// Uses the three-range minimax rational approximation in
+    /// [`crate::arch::avx512::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
     #[inline]
     fn acos(&self) -> Vec<f64> {
         unary_op::<f64, F64x8>(self, f64x8::LANE_COUNT, |v| v.acos())
+    }
+
+    /// Arc sine of every element, processed 8 lanes at a time via AVX-512.
+    ///
+    /// Uses the two-range minimax rational approximation in
+    /// [`crate::arch::avx512::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
+    #[inline]
+    fn asin(&self) -> Vec<f64> {
+        unary_op::<f64, F64x8>(self, f64x8::LANE_COUNT, |v| v.asin())
     }
 }
 
