@@ -4,7 +4,7 @@
 //! [`crate::ops::vec`] and are reused here unchanged. Only the horizontal
 //! reductions and the `impl VecExt<T>` blocks are architecture-specific.
 
-use std::arch::aarch64::{vminq_f32, vmaxq_f32, vminq_f64, vmaxq_f64};
+use std::arch::aarch64::{vmaxq_f32, vmaxq_f64, vminq_f32, vminq_f64};
 
 use crate::arch::neon::{f32x4, f32x4::F32x4};
 use crate::arch::neon::{f64x2, f64x2::F64x2};
