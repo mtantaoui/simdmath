@@ -6,12 +6,10 @@
 
 use std::arch::x86_64::{_mm256_max_pd, _mm256_max_ps, _mm256_min_pd, _mm256_min_ps};
 
-use crate::arch::avx2::abs::{_mm256_abs_pd, _mm256_abs_ps};
 use crate::arch::avx2::{f32x8, f32x8::F32x8};
 use crate::arch::avx2::{f64x4, f64x4::F64x4};
 use crate::ops::simd::{Load, Store};
-use crate::ops::vec::{binary_op, binary_op_inplace, scalar_op, scalar_op_inplace, VecExt};
-
+use crate::ops::vec::{VecExt, binary_op, binary_op_inplace, scalar_op, scalar_op_inplace};
 
 impl VecExt<f32> for Vec<f32> {
     #[inline]
