@@ -34,6 +34,16 @@ impl VecMath<f32> for Vec<f32> {
     fn asin(&self) -> Vec<f32> {
         unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.asin())
     }
+
+    /// Arc tangent of every element, processed 8 lanes at a time via AVX2.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 3 ULP** error across the entire domain.
+    #[inline]
+    fn atan(&self) -> Vec<f32> {
+        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.atan())
+    }
 }
 
 impl VecMath<f64> for Vec<f64> {
@@ -59,6 +69,16 @@ impl VecMath<f64> for Vec<f64> {
     #[inline]
     fn asin(&self) -> Vec<f64> {
         unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.asin())
+    }
+
+    /// Arc tangent of every element, processed 4 lanes at a time via AVX2.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain (musl 4-range reduction).
+    #[inline]
+    fn atan(&self) -> Vec<f64> {
+        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.atan())
     }
 }
 
