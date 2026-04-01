@@ -7,7 +7,7 @@
 use std::arch::x86_64::*;
 
 use crate::arch::avx2::abs::{_mm256_abs_pd, _mm256_abs_ps};
-use crate::arch::avx2::acos::_mm256_acos_ps;
+use crate::arch::avx2::acos::{_mm256_acos_pd, _mm256_acos_ps};
 use crate::arch::avx2::f32x8::F32x8;
 use crate::arch::avx2::f64x4::F64x4;
 use crate::math::VecMath;
@@ -44,21 +44,14 @@ impl VecMath<f64> for F64x4 {
         }
     }
 
-    /// Arc cosine of every lane via scalar `f64::acos`.
+    /// Arc cosine of every lane via the three-range minimax approximation.
     ///
-    /// A SIMD `_mm256_acos_pd` is not yet implemented; this falls back to the
-    /// platform libm for each lane individually.
+    /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
     #[inline]
     fn acos(&self) -> F64x4 {
-        // Extract, apply scalar acos, reassemble.
-        let mut buf = [0.0f64; 4];
-        unsafe { _mm256_storeu_pd(buf.as_mut_ptr(), self.elements) };
-        for x in &mut buf[..self.size] {
-            *x = x.acos();
-        }
         F64x4 {
             size: self.size,
-            elements: unsafe { _mm256_loadu_pd(buf.as_ptr()) },
+            elements: unsafe { _mm256_acos_pd(self.elements) },
         }
     }
 }

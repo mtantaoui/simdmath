@@ -1,4 +1,4 @@
-//! AVX2 SIMD implementation of `acos(x)` for `f32` vectors.
+//! AVX2 SIMD implementation of `acos(x)` for `f32` and `f64` vectors.
 //!
 //! # Algorithm
 //!
@@ -13,6 +13,13 @@
 //! - Case D: `fmsub(r, s, pio2_lo)` instead of separate mul + sub
 //! - Case E: `fmadd(r, s, c)` instead of separate mul + add
 //!
+
+// These constants are intentionally taken verbatim from musl libc's acos
+// implementation. They have specific bit patterns designed for the Dekker
+// two-sum representation and rational approximation. Do not replace them
+// with Rust's std::f32::consts or std::f64::consts values.
+#![allow(clippy::approx_constant)]
+#![allow(clippy::excessive_precision)]
 //! The core building block is a Padé rational approximation `r(z)` that
 //! approximates `(asin(√z)/√z − 1)/z` on `[0, 0.25]`, yielding:
 //!
@@ -60,7 +67,7 @@ use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-use crate::arch::avx2::abs::_mm256_abs_ps;
+use crate::arch::avx2::abs::{_mm256_abs_pd, _mm256_abs_ps};
 
 // ---------------------------------------------------------------------------
 // Constants (from musl acosf.c / fdlibm)
@@ -70,7 +77,7 @@ use crate::arch::avx2::abs::_mm256_abs_ps;
 ///
 /// The split keeps `PIO2_HI` exact to 23 significant bits so that arithmetic
 /// involving π/2 avoids catastrophic cancellation.
-// 
+//
 pub(crate) const PIO2_HI: f32 = 1.570_796_3;
 
 /// Low word of π/2: `PIO2_LO = π/2 − PIO2_HI` (≈ 7.55e-8).
@@ -114,147 +121,385 @@ pub(crate) const X1P_120: f32 = 1.175_494_4e-38;
 /// `x` must be a valid `__m256` register. No alignment or memory constraints.
 #[inline]
 pub(crate) unsafe fn _mm256_acos_ps(x: __m256) -> __m256 {
-    // Broadcast scalar constants to SIMD registers once.
-    let pio2_hi = _mm256_set1_ps(PIO2_HI);
-    let pio2_lo = _mm256_set1_ps(PIO2_LO);
-    let p_s0 = _mm256_set1_ps(P_S0);
-    let p_s1 = _mm256_set1_ps(P_S1);
-    let p_s2 = _mm256_set1_ps(P_S2);
-    let q_s1 = _mm256_set1_ps(Q_S1);
-    let x1p_120 = _mm256_set1_ps(X1P_120);
-    let one = _mm256_set1_ps(1.0);
-    let half = _mm256_set1_ps(0.5);
-    let two = _mm256_set1_ps(2.0);
-    let zero = _mm256_setzero_ps();
+    unsafe {
+        // Broadcast scalar constants to SIMD registers once.
+        let pio2_hi = _mm256_set1_ps(PIO2_HI);
+        let pio2_lo = _mm256_set1_ps(PIO2_LO);
+        let p_s0 = _mm256_set1_ps(P_S0);
+        let p_s1 = _mm256_set1_ps(P_S1);
+        let p_s2 = _mm256_set1_ps(P_S2);
+        let q_s1 = _mm256_set1_ps(Q_S1);
+        let x1p_120 = _mm256_set1_ps(X1P_120);
+        let one = _mm256_set1_ps(1.0);
+        let half = _mm256_set1_ps(0.5);
+        let two = _mm256_set1_ps(2.0);
+        let zero = _mm256_setzero_ps();
 
-    // |x| — used to determine which range each lane falls into.
-    let abs_x = _mm256_abs_ps(x);
+        // |x| — used to determine which range each lane falls into.
+        let abs_x = _mm256_abs_ps(x);
 
-    // -------------------------------------------------------------------------
-    // Padé rational approximation r(z)
-    //
-    //   p(z) = P_S0 + z·(P_S1 + z·P_S2)   [degree-2 numerator, Horner form]
-    //   q(z) = 1 + z·Q_S1                  [degree-1 denominator]
-    //   r(z) = z·p(z) / q(z)
-    //
-    // r(z) ≈ (asin(√z)/√z − 1)/z on [0, 0.25], so asin(x) ≈ x + x·r(x²).
-    // -------------------------------------------------------------------------
-    let r = |z: __m256| -> __m256 {
-        let p = _mm256_mul_ps(z, _mm256_fmadd_ps(z, _mm256_fmadd_ps(z, p_s2, p_s1), p_s0));
-        let q = _mm256_fmadd_ps(z, q_s1, one);
-        _mm256_div_ps(p, q)
-    };
+        // -------------------------------------------------------------------------
+        // Padé rational approximation r(z)
+        //
+        //   p(z) = P_S0 + z·(P_S1 + z·P_S2)   [degree-2 numerator, Horner form]
+        //   q(z) = 1 + z·Q_S1                  [degree-1 denominator]
+        //   r(z) = z·p(z) / q(z)
+        //
+        // r(z) ≈ (asin(√z)/√z − 1)/z on [0, 0.25], so asin(x) ≈ x + x·r(x²).
+        // -------------------------------------------------------------------------
+        let r = |z: __m256| -> __m256 {
+            let p = _mm256_mul_ps(z, _mm256_fmadd_ps(z, _mm256_fmadd_ps(z, p_s2, p_s1), p_s0));
+            let q = _mm256_fmadd_ps(z, q_s1, one);
+            _mm256_div_ps(p, q)
+        };
 
-    // -------------------------------------------------------------------------
-    // Lane classification masks (ordered, quiet: NaN → false for all)
-    // -------------------------------------------------------------------------
-    let is_abs_ge_1 = _mm256_cmp_ps(abs_x, one, _CMP_GE_OQ); // |x| >= 1
-    let is_abs_eq_1 = _mm256_cmp_ps(abs_x, one, _CMP_EQ_OQ); // |x| == 1
-    let is_abs_lt_half = _mm256_cmp_ps(abs_x, half, _CMP_LT_OQ); // |x| < 0.5
-    let is_x_neg = _mm256_cmp_ps(x, zero, _CMP_LT_OQ); // x < 0
+        // -------------------------------------------------------------------------
+        // Lane classification masks (ordered, quiet: NaN → false for all)
+        // -------------------------------------------------------------------------
+        let is_abs_ge_1 = _mm256_cmp_ps(abs_x, one, _CMP_GE_OQ); // |x| >= 1
+        let is_abs_eq_1 = _mm256_cmp_ps(abs_x, one, _CMP_EQ_OQ); // |x| == 1
+        let is_abs_lt_half = _mm256_cmp_ps(abs_x, half, _CMP_LT_OQ); // |x| < 0.5
+        let is_x_neg = _mm256_cmp_ps(x, zero, _CMP_LT_OQ); // x < 0
 
-    // Lanes with x in (-1, -0.5]: x is negative AND |x| >= 0.5.
-    // _mm256_andnot_ps(a, b) = ~a & b
-    let is_x_neg_large = _mm256_andnot_ps(is_abs_lt_half, is_x_neg);
+        // Lanes with x in (-1, -0.5]: x is negative AND |x| >= 0.5.
+        // _mm256_andnot_ps(a, b) = ~a & b
+        let is_x_neg_large = _mm256_andnot_ps(is_abs_lt_half, is_x_neg);
 
-    // -------------------------------------------------------------------------
-    // Case A — |x| == 1  (exact boundary values)
-    //
-    //   acos( 1) = 0
-    //   acos(-1) = 2·pio2_hi + x1p_120  ≈ π
-    //              (x1p_120 raises the IEEE 754 inexact flag as mandated)
-    // -------------------------------------------------------------------------
-    let result_eq_1 = _mm256_blendv_ps(
-        zero,                                                // x = +1 → 0
-        _mm256_add_ps(_mm256_mul_ps(two, pio2_hi), x1p_120), // x = -1 → π
-        is_x_neg,
-    );
+        // -------------------------------------------------------------------------
+        // Case A — |x| == 1  (exact boundary values)
+        //
+        //   acos( 1) = 0
+        //   acos(-1) = 2·pio2_hi + x1p_120  ≈ π
+        //              (x1p_120 raises the IEEE 754 inexact flag as mandated)
+        // -------------------------------------------------------------------------
+        let result_eq_1 = _mm256_blendv_ps(
+            zero,                                                // x = +1 → 0
+            _mm256_add_ps(_mm256_mul_ps(two, pio2_hi), x1p_120), // x = -1 → π
+            is_x_neg,
+        );
 
-    // -------------------------------------------------------------------------
-    // Case B — |x| > 1  (out-of-domain → NaN)
-    //
-    // x − x = 0 for all finite x; dividing 0/0 produces NaN. The subtraction
-    // prevents compilers from constant-folding the expression.
-    // -------------------------------------------------------------------------
-    let nan = _mm256_div_ps(zero, _mm256_sub_ps(x, x));
+        // -------------------------------------------------------------------------
+        // Case B — |x| > 1  (out-of-domain → NaN)
+        //
+        // x − x = 0 for all finite x; dividing 0/0 produces NaN. The subtraction
+        // prevents compilers from constant-folding the expression.
+        // -------------------------------------------------------------------------
+        let nan = _mm256_div_ps(zero, _mm256_sub_ps(x, x));
 
-    // For |x| >= 1: select exact result where |x| == 1, NaN otherwise.
-    let result_ge_1 = _mm256_blendv_ps(nan, result_eq_1, is_abs_eq_1);
+        // For |x| >= 1: select exact result where |x| == 1, NaN otherwise.
+        let result_ge_1 = _mm256_blendv_ps(nan, result_eq_1, is_abs_eq_1);
 
-    // -------------------------------------------------------------------------
-    // Case C — |x| < 0.5  (small argument)
-    //
-    // acos(x) = π/2 − asin(x) ≈ π/2 − x − x·r(x²)
-    //         = pio2_hi − (x − (pio2_lo − x·r(x²)))
-    //
-    // The nested subtraction keeps pio2_hi and pio2_lo paired correctly so
-    // that precision is not lost through the two-part representation of π/2.
-    // -------------------------------------------------------------------------
-    let z_small = _mm256_mul_ps(x, x);
-    // Case C: pio2_lo − x·r(z) as a single FMA (fnmadd = −a·b + c).
-    let result_small = _mm256_sub_ps(
-        pio2_hi,
-        _mm256_sub_ps(x, _mm256_fnmadd_ps(x, r(z_small), pio2_lo)),
-    );
+        // -------------------------------------------------------------------------
+        // Case C — |x| < 0.5  (small argument)
+        //
+        // acos(x) = π/2 − asin(x) ≈ π/2 − x − x·r(x²)
+        //         = pio2_hi − (x − (pio2_lo − x·r(x²)))
+        //
+        // The nested subtraction keeps pio2_hi and pio2_lo paired correctly so
+        // that precision is not lost through the two-part representation of π/2.
+        // -------------------------------------------------------------------------
+        let z_small = _mm256_mul_ps(x, x);
+        // Case C: pio2_lo − x·r(z) as a single FMA (fnmadd = −a·b + c).
+        let result_small = _mm256_sub_ps(
+            pio2_hi,
+            _mm256_sub_ps(x, _mm256_fnmadd_ps(x, r(z_small), pio2_lo)),
+        );
 
-    // -------------------------------------------------------------------------
-    // Case D — x < -0.5  (large negative argument)
-    //
-    // Identity: acos(x) = π − 2·asin(√((1+x)/2))
-    //         = 2·(π/2 − asin(s))  where s = √z, z = (1+x)/2
-    //         = 2·(pio2_hi − (s + w))
-    //
-    //   w = r(z)·s − pio2_lo   (the pio2_lo term completes the two-sum)
-    // -------------------------------------------------------------------------
-    let z_neg = _mm256_mul_ps(_mm256_add_ps(one, x), half);
-    let s_neg = _mm256_sqrt_ps(z_neg);
-    // Case D: r(z)·s − pio2_lo as a single FMA (fmsub = a·b − c).
-    let w_neg = _mm256_fmsub_ps(r(z_neg), s_neg, pio2_lo);
-    let result_neg = _mm256_mul_ps(two, _mm256_sub_ps(pio2_hi, _mm256_add_ps(s_neg, w_neg)));
+        // -------------------------------------------------------------------------
+        // Case D — x < -0.5  (large negative argument)
+        //
+        // Identity: acos(x) = π − 2·asin(√((1+x)/2))
+        //         = 2·(π/2 − asin(s))  where s = √z, z = (1+x)/2
+        //         = 2·(pio2_hi − (s + w))
+        //
+        //   w = r(z)·s − pio2_lo   (the pio2_lo term completes the two-sum)
+        // -------------------------------------------------------------------------
+        let z_neg = _mm256_mul_ps(_mm256_add_ps(one, x), half);
+        let s_neg = _mm256_sqrt_ps(z_neg);
+        // Case D: r(z)·s − pio2_lo as a single FMA (fmsub = a·b − c).
+        let w_neg = _mm256_fmsub_ps(r(z_neg), s_neg, pio2_lo);
+        let result_neg = _mm256_mul_ps(two, _mm256_sub_ps(pio2_hi, _mm256_add_ps(s_neg, w_neg)));
 
-    // -------------------------------------------------------------------------
-    // Case E — x > 0.5  (large positive argument)
-    //
-    // Identity: acos(x) = 2·asin(√((1−x)/2)) = 2·(df + w)
-    //
-    //   z  = (1−x)/2
-    //   s  = √z
-    //   df = s with the low 12 mantissa bits cleared   (Dekker high part of s)
-    //   c  = (z − df²) / (s + df)                     (rounding correction)
-    //   w  = r(z)·s + c
-    //
-    // Clearing 12 bits leaves df with only 11 significant mantissa bits, so
-    // df² is exactly representable in 23 bits — making (z − df²) exact.
-    // Then c = (s² − df²)/(s + df) = s − df recovers the discarded low bits.
-    // Together, df + c is a full-precision reconstruction of s (Dekker split).
-    // -------------------------------------------------------------------------
-    let z_pos = _mm256_mul_ps(_mm256_sub_ps(one, x), half);
-    let s_pos = _mm256_sqrt_ps(z_pos);
+        // -------------------------------------------------------------------------
+        // Case E — x > 0.5  (large positive argument)
+        //
+        // Identity: acos(x) = 2·asin(√((1−x)/2)) = 2·(df + w)
+        //
+        //   z  = (1−x)/2
+        //   s  = √z
+        //   df = s with the low 12 mantissa bits cleared   (Dekker high part of s)
+        //   c  = (z − df²) / (s + df)                     (rounding correction)
+        //   w  = r(z)·s + c
+        //
+        // Clearing 12 bits leaves df with only 11 significant mantissa bits, so
+        // df² is exactly representable in 23 bits — making (z − df²) exact.
+        // Then c = (s² − df²)/(s + df) = s − df recovers the discarded low bits.
+        // Together, df + c is a full-precision reconstruction of s (Dekker split).
+        // -------------------------------------------------------------------------
+        let z_pos = _mm256_mul_ps(_mm256_sub_ps(one, x), half);
+        let s_pos = _mm256_sqrt_ps(z_pos);
 
-    // Mask off the low 12 bits of the f32 bit representation to form df.
-    let df = _mm256_castsi256_ps(_mm256_and_si256(
-        _mm256_castps_si256(s_pos),
-        _mm256_set1_epi32(0xfffff000_u32 as i32),
-    ));
-    // Recover the rounding error introduced by truncating s to df.
-    let c_pos = _mm256_div_ps(
-        _mm256_sub_ps(z_pos, _mm256_mul_ps(df, df)),
-        _mm256_add_ps(s_pos, df),
-    );
-    // Case E: r(z)·s + c as a single FMA.
-    let w_pos = _mm256_fmadd_ps(r(z_pos), s_pos, c_pos);
-    let result_pos = _mm256_mul_ps(two, _mm256_add_ps(df, w_pos));
+        // Mask off the low 12 bits of the f32 bit representation to form df.
+        let df = _mm256_castsi256_ps(_mm256_and_si256(
+            _mm256_castps_si256(s_pos),
+            _mm256_set1_epi32(0xfffff000_u32 as i32),
+        ));
+        // Recover the rounding error introduced by truncating s to df.
+        let c_pos = _mm256_div_ps(
+            _mm256_sub_ps(z_pos, _mm256_mul_ps(df, df)),
+            _mm256_add_ps(s_pos, df),
+        );
+        // Case E: r(z)·s + c as a single FMA.
+        let w_pos = _mm256_fmadd_ps(r(z_pos), s_pos, c_pos);
+        let result_pos = _mm256_mul_ps(two, _mm256_add_ps(df, w_pos));
 
-    // -------------------------------------------------------------------------
-    // Merge: blend all cases. Priority (highest → lowest):
-    //   |x| >= 1   → result_ge_1  (exact or NaN)
-    //   |x| < 0.5  → result_small (Case C)
-    //   x ∈ (-1,-0.5] → result_neg (Case D)
-    //   x ∈ [0.5, 1)  → result_pos (Case E)
-    // -------------------------------------------------------------------------
-    let result_large = _mm256_blendv_ps(result_pos, result_neg, is_x_neg_large);
-    let result_valid = _mm256_blendv_ps(result_large, result_small, is_abs_lt_half);
-    _mm256_blendv_ps(result_valid, result_ge_1, is_abs_ge_1)
+        // -------------------------------------------------------------------------
+        // Merge: blend all cases. Priority (highest → lowest):
+        //   |x| >= 1   → result_ge_1  (exact or NaN)
+        //   |x| < 0.5  → result_small (Case C)
+        //   x ∈ (-1,-0.5] → result_neg (Case D)
+        //   x ∈ [0.5, 1)  → result_pos (Case E)
+        // -------------------------------------------------------------------------
+        let result_large = _mm256_blendv_ps(result_pos, result_neg, is_x_neg_large);
+        let result_valid = _mm256_blendv_ps(result_large, result_small, is_abs_lt_half);
+        _mm256_blendv_ps(result_valid, result_ge_1, is_abs_ge_1)
+    }
+}
+
+// ===========================================================================
+// f64 Implementation
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Constants (from musl acos.c / fdlibm for f64)
+// ---------------------------------------------------------------------------
+
+/// High word of π/2 in the Dekker two-sum `PIO2_HI_64 + PIO2_LO_64 = π/2`.
+///
+/// The split keeps `PIO2_HI_64` exact so that arithmetic involving π/2
+/// avoids catastrophic cancellation.
+pub(crate) const PIO2_HI_64: f64 = 1.570_796_326_794_896_558_00e+00;
+
+/// Low word of π/2: `PIO2_LO_64 = π/2 − PIO2_HI_64`.
+///
+/// Adding `PIO2_LO_64` to a result that already includes `PIO2_HI_64` restores
+/// the full precision of π/2.
+pub(crate) const PIO2_LO_64: f64 = 6.123_233_995_736_766_035_87e-17;
+
+/// Padé numerator coefficient: z⁰ term of p(z) in r(z) = z·p(z)/q(z).
+pub(crate) const P_S0_64: f64 = 1.666_666_666_666_666_574_15e-01;
+
+/// Padé numerator coefficient: z¹ term of p(z).
+pub(crate) const P_S1_64: f64 = -3.255_658_186_224_009_154_05e-01;
+
+/// Padé numerator coefficient: z² term of p(z).
+pub(crate) const P_S2_64: f64 = 2.012_125_321_348_629_258_81e-01;
+
+/// Padé numerator coefficient: z³ term of p(z).
+pub(crate) const P_S3_64: f64 = -4.005_553_450_067_941_140_27e-02;
+
+/// Padé numerator coefficient: z⁴ term of p(z).
+pub(crate) const P_S4_64: f64 = 7.915_349_942_898_145_321_76e-04;
+
+/// Padé numerator coefficient: z⁵ term of p(z).
+pub(crate) const P_S5_64: f64 = 3.479_331_075_960_211_675_70e-05;
+
+/// Padé denominator coefficient: z¹ term of q(z) = 1 + z·(...).
+pub(crate) const Q_S1_64: f64 = -2.403_394_911_734_414_218_78e+00;
+
+/// Padé denominator coefficient: z² term of q(z).
+pub(crate) const Q_S2_64: f64 = 2.020_945_760_233_505_694_71e+00;
+
+/// Padé denominator coefficient: z³ term of q(z).
+pub(crate) const Q_S3_64: f64 = -6.882_839_716_054_532_930_30e-01;
+
+/// Padé denominator coefficient: z⁴ term of q(z).
+pub(crate) const Q_S4_64: f64 = 7.703_815_055_590_193_527_91e-02;
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+/// Computes `acos(x)` for each lane of an AVX2 `__m256d` register.
+///
+/// All 4 lanes are processed simultaneously without branches. The result
+/// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
+/// are computed unconditionally and merged with `_mm256_blendv_pd`.
+///
+/// # Safety
+/// `x` must be a valid `__m256d` register. No alignment or memory constraints.
+#[inline]
+pub(crate) unsafe fn _mm256_acos_pd(x: __m256d) -> __m256d {
+    unsafe {
+        // Broadcast scalar constants to SIMD registers once.
+        let pio2_hi = _mm256_set1_pd(PIO2_HI_64);
+        let pio2_lo = _mm256_set1_pd(PIO2_LO_64);
+        let p_s0 = _mm256_set1_pd(P_S0_64);
+        let p_s1 = _mm256_set1_pd(P_S1_64);
+        let p_s2 = _mm256_set1_pd(P_S2_64);
+        let p_s3 = _mm256_set1_pd(P_S3_64);
+        let p_s4 = _mm256_set1_pd(P_S4_64);
+        let p_s5 = _mm256_set1_pd(P_S5_64);
+        let q_s1 = _mm256_set1_pd(Q_S1_64);
+        let q_s2 = _mm256_set1_pd(Q_S2_64);
+        let q_s3 = _mm256_set1_pd(Q_S3_64);
+        let q_s4 = _mm256_set1_pd(Q_S4_64);
+        let one = _mm256_set1_pd(1.0);
+        let half = _mm256_set1_pd(0.5);
+        let two = _mm256_set1_pd(2.0);
+        let zero = _mm256_setzero_pd();
+
+        // |x| — used to determine which range each lane falls into.
+        let abs_x = _mm256_abs_pd(x);
+
+        // -------------------------------------------------------------------------
+        // Padé rational approximation r(z)
+        //
+        //   p(z) = P_S0 + z·(P_S1 + z·(P_S2 + z·(P_S3 + z·(P_S4 + z·P_S5))))
+        //   q(z) = 1 + z·(Q_S1 + z·(Q_S2 + z·(Q_S3 + z·Q_S4)))
+        //   r(z) = z·p(z) / q(z)
+        //
+        // r(z) ≈ (asin(√z)/√z − 1)/z on [0, 0.25], so asin(x) ≈ x + x·r(x²).
+        // -------------------------------------------------------------------------
+        let r = |z: __m256d| -> __m256d {
+            let p = _mm256_mul_pd(
+                z,
+                _mm256_fmadd_pd(
+                    z,
+                    _mm256_fmadd_pd(
+                        z,
+                        _mm256_fmadd_pd(
+                            z,
+                            _mm256_fmadd_pd(z, _mm256_fmadd_pd(z, p_s5, p_s4), p_s3),
+                            p_s2,
+                        ),
+                        p_s1,
+                    ),
+                    p_s0,
+                ),
+            );
+            let q = _mm256_fmadd_pd(
+                z,
+                _mm256_fmadd_pd(
+                    z,
+                    _mm256_fmadd_pd(z, _mm256_fmadd_pd(z, q_s4, q_s3), q_s2),
+                    q_s1,
+                ),
+                one,
+            );
+            _mm256_div_pd(p, q)
+        };
+
+        // -------------------------------------------------------------------------
+        // Lane classification masks (ordered, quiet: NaN → false for all)
+        // -------------------------------------------------------------------------
+        let is_abs_ge_1 = _mm256_cmp_pd(abs_x, one, _CMP_GE_OQ); // |x| >= 1
+        let is_abs_eq_1 = _mm256_cmp_pd(abs_x, one, _CMP_EQ_OQ); // |x| == 1
+        let is_abs_lt_half = _mm256_cmp_pd(abs_x, half, _CMP_LT_OQ); // |x| < 0.5
+        let is_x_neg = _mm256_cmp_pd(x, zero, _CMP_LT_OQ); // x < 0
+
+        // Lanes with x in (-1, -0.5]: x is negative AND |x| >= 0.5.
+        // _mm256_andnot_pd(a, b) = ~a & b
+        let is_x_neg_large = _mm256_andnot_pd(is_abs_lt_half, is_x_neg);
+
+        // -------------------------------------------------------------------------
+        // Case A — |x| == 1  (exact boundary values)
+        //
+        //   acos( 1) = 0
+        //   acos(-1) = π = 2·pio2_hi
+        // -------------------------------------------------------------------------
+        let result_eq_1 = _mm256_blendv_pd(
+            zero,                                  // x = +1 → 0
+            _mm256_mul_pd(two, pio2_hi),           // x = -1 → π
+            is_x_neg,
+        );
+
+        // -------------------------------------------------------------------------
+        // Case B — |x| > 1  (out-of-domain → NaN)
+        //
+        // x − x = 0 for all finite x; dividing 0/0 produces NaN. The subtraction
+        // prevents compilers from constant-folding the expression.
+        // -------------------------------------------------------------------------
+        let nan = _mm256_div_pd(zero, _mm256_sub_pd(x, x));
+
+        // For |x| >= 1: select exact result where |x| == 1, NaN otherwise.
+        let result_ge_1 = _mm256_blendv_pd(nan, result_eq_1, is_abs_eq_1);
+
+        // -------------------------------------------------------------------------
+        // Case C — |x| < 0.5  (small argument)
+        //
+        // acos(x) = π/2 − asin(x) ≈ π/2 − x − x·r(x²)
+        //         = pio2_hi − (x − (pio2_lo − x·r(x²)))
+        //
+        // The nested subtraction keeps pio2_hi and pio2_lo paired correctly so
+        // that precision is not lost through the two-part representation of π/2.
+        // -------------------------------------------------------------------------
+        let z_small = _mm256_mul_pd(x, x);
+        // Case C: pio2_lo − x·r(z) as a single FMA (fnmadd = −a·b + c).
+        let result_small = _mm256_sub_pd(
+            pio2_hi,
+            _mm256_sub_pd(x, _mm256_fnmadd_pd(x, r(z_small), pio2_lo)),
+        );
+
+        // -------------------------------------------------------------------------
+        // Case D — x < -0.5  (large negative argument)
+        //
+        // Identity: acos(x) = π − 2·asin(√((1+x)/2))
+        //         = 2·(π/2 − asin(s))  where s = √z, z = (1+x)/2
+        //         = 2·(pio2_hi − (s + w))
+        //
+        //   w = r(z)·s − pio2_lo   (the pio2_lo term completes the two-sum)
+        // -------------------------------------------------------------------------
+        let z_neg = _mm256_mul_pd(_mm256_add_pd(one, x), half);
+        let s_neg = _mm256_sqrt_pd(z_neg);
+        // Case D: r(z)·s − pio2_lo as a single FMA (fmsub = a·b − c).
+        let w_neg = _mm256_fmsub_pd(r(z_neg), s_neg, pio2_lo);
+        let result_neg = _mm256_mul_pd(two, _mm256_sub_pd(pio2_hi, _mm256_add_pd(s_neg, w_neg)));
+
+        // -------------------------------------------------------------------------
+        // Case E — x > 0.5  (large positive argument)
+        //
+        // Identity: acos(x) = 2·asin(√((1−x)/2)) = 2·(df + w)
+        //
+        //   z  = (1−x)/2
+        //   s  = √z
+        //   df = s with the low 32 mantissa bits cleared   (Dekker high part of s)
+        //   c  = (z − df²) / (s + df)                     (rounding correction)
+        //   w  = r(z)·s + c
+        //
+        // Clearing 32 bits leaves df with only 20 significant mantissa bits, so
+        // df² is exactly representable — making (z − df²) exact.
+        // Then c = (s² − df²)/(s + df) = s − df recovers the discarded low bits.
+        // Together, df + c is a full-precision reconstruction of s (Dekker split).
+        // -------------------------------------------------------------------------
+        let z_pos = _mm256_mul_pd(_mm256_sub_pd(one, x), half);
+        let s_pos = _mm256_sqrt_pd(z_pos);
+
+        // Mask off the low 32 bits of the f64 bit representation to form df.
+        let df = _mm256_castsi256_pd(_mm256_and_si256(
+            _mm256_castpd_si256(s_pos),
+            _mm256_set1_epi64x(0xffffffff00000000_u64 as i64),
+        ));
+        // Recover the rounding error introduced by truncating s to df.
+        let c_pos = _mm256_div_pd(
+            _mm256_sub_pd(z_pos, _mm256_mul_pd(df, df)),
+            _mm256_add_pd(s_pos, df),
+        );
+        // Case E: r(z)·s + c as a single FMA.
+        let w_pos = _mm256_fmadd_pd(r(z_pos), s_pos, c_pos);
+        let result_pos = _mm256_mul_pd(two, _mm256_add_pd(df, w_pos));
+
+        // -------------------------------------------------------------------------
+        // Merge: blend all cases. Priority (highest → lowest):
+        //   |x| >= 1   → result_ge_1  (exact or NaN)
+        //   |x| < 0.5  → result_small (Case C)
+        //   x ∈ (-1,-0.5] → result_neg (Case D)
+        //   x ∈ [0.5, 1)  → result_pos (Case E)
+        // -------------------------------------------------------------------------
+        let result_large = _mm256_blendv_pd(result_pos, result_neg, is_x_neg_large);
+        let result_valid = _mm256_blendv_pd(result_large, result_small, is_abs_lt_half);
+        _mm256_blendv_pd(result_valid, result_ge_1, is_abs_ge_1)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +514,12 @@ mod tests {
     const TOL: f32 = 5e-7;
 
     /// Load 8 copies of `val`, call `_mm256_acos_ps`, and return lane 0.
-    unsafe fn acos_scalar(val: f32) -> f32 {
+    unsafe fn acos_scalar(val: f32) -> f32 { unsafe {
         let v = _mm256_set1_ps(val);
         let mut out = [0.0f32; 8];
         _mm256_storeu_ps(out.as_mut_ptr(), _mm256_acos_ps(v));
         out[0]
-    }
+    }}
 
     // ---- Special / boundary values -------------------------------------------
 
@@ -476,14 +721,269 @@ mod tests {
                 let true_val = (x as f64).acos() as f32;
                 let our_val = unsafe { acos_scalar(x) };
                 let d = (our_val.to_bits() as i32 - true_val.to_bits() as i32).unsigned_abs();
-                if d > max_ulp { max_ulp = d; worst_x = x; }
+                if d > max_ulp {
+                    max_ulp = d;
+                    worst_x = x;
+                }
             }
             bits = bits.wrapping_add(1024);
-            if bits == 0 { break; }
+            if bits == 0 {
+                break;
+            }
         }
         assert!(
             max_ulp <= 1,
             "max ULP {max_ulp} at x={worst_x:.8} — expected ≤ 1"
+        );
+    }
+
+    // ===========================================================================
+    // f64 tests
+    // ===========================================================================
+
+    /// Tolerance: ~2 ULPs at the scale of π. One ULP of π in f64 ≈ 4.44e-16.
+    const TOL_64: f64 = 1e-15;
+
+    /// Load 4 copies of `val`, call `_mm256_acos_pd`, and return lane 0.
+    unsafe fn acos_scalar_64(val: f64) -> f64 { unsafe {
+        let v = _mm256_set1_pd(val);
+        let mut out = [0.0f64; 4];
+        _mm256_storeu_pd(out.as_mut_ptr(), _mm256_acos_pd(v));
+        out[0]
+    }}
+
+    // ---- Special / boundary values (f64) -------------------------------------
+
+    #[test]
+    fn acos_pd_of_one_is_zero() {
+        unsafe {
+            assert_eq!(acos_scalar_64(1.0), 0.0);
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_neg_one_is_pi() {
+        unsafe {
+            let result = acos_scalar_64(-1.0);
+            assert!(
+                (result - std::f64::consts::PI).abs() < TOL_64,
+                "acos(-1) = {result}, expected π ≈ {}",
+                std::f64::consts::PI
+            );
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_zero_is_pio2() {
+        unsafe {
+            let result = acos_scalar_64(0.0);
+            assert!(
+                (result - std::f64::consts::FRAC_PI_2).abs() < TOL_64,
+                "acos(0) = {result}"
+            );
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_neg_zero_equals_acos_of_pos_zero() {
+        unsafe {
+            let result = acos_scalar_64(-0.0f64);
+            assert!(
+                (result - std::f64::consts::FRAC_PI_2).abs() < TOL_64,
+                "acos(-0.0) = {result}"
+            );
+        }
+    }
+
+    // ---- Range-boundary values (|x| = 0.5) f64 -------------------------------
+
+    #[test]
+    fn acos_pd_of_pos_half_is_pi_over_3() {
+        // acos(0.5) = π/3
+        unsafe {
+            let result = acos_scalar_64(0.5);
+            let expected = std::f64::consts::PI / 3.0;
+            assert!(
+                (result - expected).abs() < TOL_64,
+                "acos(0.5) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_neg_half_is_2pi_over_3() {
+        // acos(-0.5) = 2π/3
+        unsafe {
+            let result = acos_scalar_64(-0.5);
+            let expected = 2.0 * std::f64::consts::PI / 3.0;
+            assert!(
+                (result - expected).abs() < TOL_64,
+                "acos(-0.5) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    // ---- Common angles (f64) -------------------------------------------------
+
+    #[test]
+    fn acos_pd_of_sqrt2_over_2_is_pi_over_4() {
+        // acos(√2/2) = π/4
+        unsafe {
+            let result = acos_scalar_64(std::f64::consts::FRAC_1_SQRT_2);
+            let expected = std::f64::consts::FRAC_PI_4;
+            assert!(
+                (result - expected).abs() < TOL_64,
+                "acos(√2/2) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_neg_sqrt2_over_2_is_3pi_over_4() {
+        // acos(-√2/2) = 3π/4
+        unsafe {
+            let result = acos_scalar_64(-std::f64::consts::FRAC_1_SQRT_2);
+            let expected = 3.0 * std::f64::consts::FRAC_PI_4;
+            assert!(
+                (result - expected).abs() < TOL_64,
+                "acos(-√2/2) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_sqrt3_over_2_is_pi_over_6() {
+        // acos(√3/2) = π/6
+        unsafe {
+            let result = acos_scalar_64(3.0f64.sqrt() / 2.0);
+            let expected = std::f64::consts::FRAC_PI_6;
+            assert!(
+                (result - expected).abs() < TOL_64,
+                "acos(√3/2) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_neg_sqrt3_over_2_is_5pi_over_6() {
+        // acos(-√3/2) = 5π/6
+        unsafe {
+            let result = acos_scalar_64(-3.0f64.sqrt() / 2.0);
+            let expected = 5.0 * std::f64::consts::FRAC_PI_6;
+            assert!(
+                (result - expected).abs() < TOL_64,
+                "acos(-√3/2) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    // ---- Out-of-domain inputs → NaN (f64) ------------------------------------
+
+    #[test]
+    fn acos_pd_above_one_is_nan() {
+        unsafe {
+            assert!(acos_scalar_64(1.5).is_nan());
+        }
+    }
+
+    #[test]
+    fn acos_pd_below_neg_one_is_nan() {
+        unsafe {
+            assert!(acos_scalar_64(-1.5).is_nan());
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_infinity_is_nan() {
+        unsafe {
+            assert!(acos_scalar_64(f64::INFINITY).is_nan());
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_neg_infinity_is_nan() {
+        unsafe {
+            assert!(acos_scalar_64(f64::NEG_INFINITY).is_nan());
+        }
+    }
+
+    #[test]
+    fn acos_pd_of_nan_is_nan() {
+        unsafe {
+            assert!(acos_scalar_64(f64::NAN).is_nan());
+        }
+    }
+
+    // ---- All 4 lanes processed correctly (f64) -------------------------------
+
+    #[test]
+    fn acos_pd_processes_all_4_lanes_independently() {
+        // Mix of inputs spanning all three computational ranges.
+        let inputs = [0.0f64, 0.5, -0.5, 0.9];
+        unsafe {
+            let v = _mm256_loadu_pd(inputs.as_ptr());
+            let mut out = [0.0f64; 4];
+            _mm256_storeu_pd(out.as_mut_ptr(), _mm256_acos_pd(v));
+
+            let expected: [f64; 4] = inputs.map(|x| x.acos());
+            for (i, (&r, &e)) in out.iter().zip(&expected).enumerate() {
+                assert!(
+                    (r - e).abs() < TOL_64,
+                    "lane {i}: acos({}) = {r}, expected {e}",
+                    inputs[i]
+                );
+            }
+        }
+    }
+
+    // ---- ULP accuracy sweep (f64) --------------------------------------------
+
+    /// Verify ≤ 1 ULP vs correctly-rounded reference for a sample of f64 values
+    /// in `[-1, 1]` (~2 million values).
+    #[test]
+    fn acos_pd_max_ulp_error_is_at_most_1() {
+        let mut max_ulp: u64 = 0;
+        let mut worst_x: f64 = 0.0;
+
+        // Sample uniformly across the f64 range [-1, 1].
+        // We can't test all f64s, so we sample every ~4 trillionth value.
+        // This gives us about 2 million test values (similar to f32 sweep).
+        let step: u64 = 1 << 42;
+        let mut bits: u64 = 0u64;
+
+        loop {
+            let x = f64::from_bits(bits);
+            if x.abs() <= 1.0 {
+                let true_val = x.acos();
+                let our_val = unsafe { acos_scalar_64(x) };
+                let d = (our_val.to_bits() as i64 - true_val.to_bits() as i64).unsigned_abs();
+                if d > max_ulp {
+                    max_ulp = d;
+                    worst_x = x;
+                }
+            }
+
+            // Also test negative values.
+            let neg_x = -x;
+            if neg_x.abs() <= 1.0 {
+                let true_val = neg_x.acos();
+                let our_val = unsafe { acos_scalar_64(neg_x) };
+                let d = (our_val.to_bits() as i64 - true_val.to_bits() as i64).unsigned_abs();
+                if d > max_ulp {
+                    max_ulp = d;
+                    worst_x = neg_x;
+                }
+            }
+
+            let (new_bits, overflow) = bits.overflowing_add(step);
+            bits = new_bits;
+            if overflow {
+                break;
+            }
+        }
+        assert!(
+            max_ulp <= 1,
+            "max ULP {max_ulp} at x={worst_x:.16} — expected ≤ 1"
         );
     }
 }

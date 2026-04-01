@@ -20,6 +20,9 @@
 //!
 //! Both functions compile to a single `vpandnd` / `vpandnq` instruction.
 
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 /// Computes the absolute value of each `f32` lane in an AVX-512 `__m512` register.
@@ -90,7 +93,13 @@ mod tests {
     #[test]
     fn abs_ps_mixed_signs() {
         unsafe {
-            let src: [f32; 16] = core::array::from_fn(|i| if i % 2 == 0 { -((i + 1) as f32) } else { (i + 1) as f32 });
+            let src: [f32; 16] = core::array::from_fn(|i| {
+                if i % 2 == 0 {
+                    -((i + 1) as f32)
+                } else {
+                    (i + 1) as f32
+                }
+            });
             let input = _mm512_loadu_ps(src.as_ptr());
             let result = _mm512_abs_ps(input);
             let mut out = [0.0f32; 16];
