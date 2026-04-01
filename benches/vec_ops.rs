@@ -73,11 +73,15 @@ fn scalar_product<T: Copy + Product>(a: &[T]) -> T {
 }
 
 fn scalar_min<T: Copy + PartialOrd>(a: &[T], init: T) -> T {
-    a.iter().copied().fold(init, |acc, x| if x < acc { x } else { acc })
+    a.iter()
+        .copied()
+        .fold(init, |acc, x| if x < acc { x } else { acc })
 }
 
 fn scalar_max<T: Copy + PartialOrd>(a: &[T], init: T) -> T {
-    a.iter().copied().fold(init, |acc, x| if x > acc { x } else { acc })
+    a.iter()
+        .copied()
+        .fold(init, |acc, x| if x > acc { x } else { acc })
 }
 
 // ---------------------------------------------------------------------------

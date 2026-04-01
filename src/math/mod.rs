@@ -67,7 +67,11 @@ pub trait VecMath<T> {
 // Vec<T> implementations — arch dispatch
 // ---------------------------------------------------------------------------
 
-#[cfg(all(target_arch = "x86_64", not(target_feature = "avx512f"), target_feature = "avx2"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    not(target_feature = "avx512f"),
+    target_feature = "avx2"
+))]
 mod avx2;
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
