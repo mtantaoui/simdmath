@@ -619,7 +619,7 @@ mod tests {
                 size: LANE_COUNT,
                 elements: vld1q_f64([1.0f64, 2.0].as_ptr()),
             };
-            let mut dst = [0.0f64; LANE_COUNT];
+            let dst = [0.0f64; LANE_COUNT];
             v.store_at(dst.as_ptr());
             assert_eq!(dst, [1.0, 2.0]);
         }
