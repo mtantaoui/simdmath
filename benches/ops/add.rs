@@ -38,10 +38,10 @@ pub fn bench_add_scalar_f32(c: &mut Criterion) {
     for &n in SIZES_F32 {
         let (a, _) = make_vecs_f32(n);
         g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(a.add_scalar(black_box(3.14f32))))
+            bench.iter(|| black_box(a.add_scalar(black_box(3.5f32))))
         });
         g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_add_s(black_box(&a), black_box(3.14f32))))
+            bench.iter(|| black_box(scalar_add_s(black_box(&a), black_box(3.5f32))))
         });
     }
     g.finish();
@@ -52,10 +52,10 @@ pub fn bench_add_scalar_f64(c: &mut Criterion) {
     for &n in SIZES_F64 {
         let (a, _) = make_vecs_f64(n);
         g.bench_with_input(BenchmarkId::new("simd", n), &n, |bench, _| {
-            bench.iter(|| black_box(a.add_scalar(black_box(3.14f64))))
+            bench.iter(|| black_box(a.add_scalar(black_box(3.5f64))))
         });
         g.bench_with_input(BenchmarkId::new("scalar", n), &n, |bench, _| {
-            bench.iter(|| black_box(scalar_add_s(black_box(&a), black_box(3.14f64))))
+            bench.iter(|| black_box(scalar_add_s(black_box(&a), black_box(3.5f64))))
         });
     }
     g.finish();

@@ -154,8 +154,8 @@ impl Load<f64> for F64x2 {
 
         unsafe {
             let mut arr = [0.0f64; LANE_COUNT];
-            for i in 0..size {
-                arr[i] = *ptr.add(i);
+            for (i, slot) in arr.iter_mut().enumerate().take(size) {
+                *slot = *ptr.add(i);
             }
             Self {
                 elements: vld1q_f64(arr.as_ptr()),
@@ -263,8 +263,8 @@ impl Store<f64> for F64x2 {
         unsafe {
             let mut arr = [0.0f64; LANE_COUNT];
             vst1q_f64(arr.as_mut_ptr(), self.elements);
-            for i in 0..self.size {
-                *ptr.add(i) = arr[i];
+            for (i, &val) in arr.iter().enumerate().take(self.size) {
+                *ptr.add(i) = val;
             }
         }
     }
@@ -531,12 +531,12 @@ mod tests {
     #[test]
     fn broadcast_fills_all_lanes_with_value() {
         unsafe {
-            let v = F64x2::broadcast(3.14);
+            let v = F64x2::broadcast(3.5);
             assert_eq!(v.size, LANE_COUNT);
             let mut out = [0.0f64; LANE_COUNT];
             vst1q_f64(out.as_mut_ptr(), v.elements);
             for lane in out {
-                assert!((lane - 3.14f64).abs() < f64::EPSILON);
+                assert!((lane - 3.5f64).abs() < f64::EPSILON);
             }
         }
     }
