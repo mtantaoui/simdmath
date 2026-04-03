@@ -93,178 +93,180 @@ use crate::arch::consts::atan2::{
 #[inline]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_atan2_ps(y: __m512, x: __m512) -> __m512 {
-    // -------------------------------------------------------------------------
-    // Broadcast constants
-    // -------------------------------------------------------------------------
-    let zero = _mm512_setzero_ps();
-    let neg_zero = _mm512_set1_ps(-0.0);
-    let pi_hi = _mm512_set1_ps(PI_HI_32);
-    let pi_lo = _mm512_set1_ps(PI_LO_32);
-    let pi_over_2 = _mm512_set1_ps(FRAC_PI_2_32);
-    let pi_over_4 = _mm512_set1_ps(FRAC_PI_4_32);
-    let three_pi_over_4 = _mm512_set1_ps(FRAC_3_PI_4_32);
+    unsafe {
+        // -------------------------------------------------------------------------
+        // Broadcast constants
+        // -------------------------------------------------------------------------
+        let zero = _mm512_setzero_ps();
+        let neg_zero = _mm512_set1_ps(-0.0);
+        let pi_hi = _mm512_set1_ps(PI_HI_32);
+        let pi_lo = _mm512_set1_ps(PI_LO_32);
+        let pi_over_2 = _mm512_set1_ps(FRAC_PI_2_32);
+        let pi_over_4 = _mm512_set1_ps(FRAC_PI_4_32);
+        let three_pi_over_4 = _mm512_set1_ps(FRAC_3_PI_4_32);
 
-    // Integer masks for bit manipulation
-    let abs_mask = _mm512_set1_epi32(0x7FFF_FFFF_u32 as i32);
-    let one_bits = _mm512_set1_epi32(0x3F80_0000_u32 as i32); // 1.0f32
-    let inf_bits = _mm512_set1_epi32(0x7F80_0000_u32 as i32); // +∞
-    let huge_threshold = _mm512_set1_epi32(HUGE_RATIO_THRESHOLD_32);
+        // Integer masks for bit manipulation
+        let abs_mask = _mm512_set1_epi32(0x7FFF_FFFF_u32 as i32);
+        let one_bits = _mm512_set1_epi32(0x3F80_0000_u32 as i32); // 1.0f32
+        let inf_bits = _mm512_set1_epi32(0x7F80_0000_u32 as i32); // +∞
+        let huge_threshold = _mm512_set1_epi32(HUGE_RATIO_THRESHOLD_32);
 
-    // -------------------------------------------------------------------------
-    // Extract bit representations and absolute values
-    // -------------------------------------------------------------------------
-    let x_bits = _mm512_castps_si512(x);
-    let y_bits = _mm512_castps_si512(y);
+        // -------------------------------------------------------------------------
+        // Extract bit representations and absolute values
+        // -------------------------------------------------------------------------
+        let x_bits = _mm512_castps_si512(x);
+        let y_bits = _mm512_castps_si512(y);
 
-    let ix = _mm512_and_si512(x_bits, abs_mask); // |x| as integer bits
-    let iy = _mm512_and_si512(y_bits, abs_mask); // |y| as integer bits
+        let ix = _mm512_and_si512(x_bits, abs_mask); // |x| as integer bits
+        let iy = _mm512_and_si512(y_bits, abs_mask); // |y| as integer bits
 
-    let abs_x = _mm512_abs_ps(x);
-    let abs_y = _mm512_abs_ps(y);
+        let abs_x = _mm512_abs_ps(x);
+        let abs_y = _mm512_abs_ps(y);
 
-    // -------------------------------------------------------------------------
-    // Compute quadrant index: m = 2·sign(x) + sign(y)
-    //
-    // m ∈ {0, 1, 2, 3} encodes which quadrant (x, y) lies in:
-    //   m=0: x≥0, y≥0 (Q1)    m=1: x≥0, y<0 (Q4)
-    //   m=2: x<0, y≥0 (Q2)    m=3: x<0, y<0 (Q3)
-    // -------------------------------------------------------------------------
-    let sign_x = _mm512_srli_epi32(x_bits, 31); // 0 or 1
-    let sign_y = _mm512_srli_epi32(y_bits, 31); // 0 or 1
-    let m = _mm512_or_si512(_mm512_slli_epi32(sign_x, 1), sign_y);
+        // -------------------------------------------------------------------------
+        // Compute quadrant index: m = 2·sign(x) + sign(y)
+        //
+        // m ∈ {0, 1, 2, 3} encodes which quadrant (x, y) lies in:
+        //   m=0: x≥0, y≥0 (Q1)    m=1: x≥0, y<0 (Q4)
+        //   m=2: x<0, y≥0 (Q2)    m=3: x<0, y<0 (Q3)
+        // -------------------------------------------------------------------------
+        let sign_x = _mm512_srli_epi32(x_bits, 31); // 0 or 1
+        let sign_y = _mm512_srli_epi32(y_bits, 31); // 0 or 1
+        let m = _mm512_or_si512(_mm512_slli_epi32(sign_x, 1), sign_y);
 
-    // Precompute masks for each m value (AVX-512 uses __mmask16 for 16 lanes)
-    let m_eq_0: __mmask16 = _mm512_cmpeq_epi32_mask(m, _mm512_setzero_si512());
-    let m_eq_1: __mmask16 = _mm512_cmpeq_epi32_mask(m, _mm512_set1_epi32(1));
-    let m_eq_2: __mmask16 = _mm512_cmpeq_epi32_mask(m, _mm512_set1_epi32(2));
-    let m_01: __mmask16 = m_eq_0 | m_eq_1; // m ∈ {0, 1} → x ≥ 0
-    let m_02: __mmask16 = m_eq_0 | m_eq_2; // m ∈ {0, 2} → y ≥ 0
+        // Precompute masks for each m value (AVX-512 uses __mmask16 for 16 lanes)
+        let m_eq_0: __mmask16 = _mm512_cmpeq_epi32_mask(m, _mm512_setzero_si512());
+        let m_eq_1: __mmask16 = _mm512_cmpeq_epi32_mask(m, _mm512_set1_epi32(1));
+        let m_eq_2: __mmask16 = _mm512_cmpeq_epi32_mask(m, _mm512_set1_epi32(2));
+        let m_01: __mmask16 = m_eq_0 | m_eq_1; // m ∈ {0, 1} → x ≥ 0
+        let m_02: __mmask16 = m_eq_0 | m_eq_2; // m ∈ {0, 2} → y ≥ 0
 
-    // -------------------------------------------------------------------------
-    // Condition masks for special cases
-    // -------------------------------------------------------------------------
-    let is_x_one: __mmask16 = _mm512_cmpeq_epi32_mask(x_bits, one_bits);
-    let is_y_zero: __mmask16 = _mm512_cmpeq_epi32_mask(iy, _mm512_setzero_si512());
-    let is_x_zero: __mmask16 = _mm512_cmpeq_epi32_mask(ix, _mm512_setzero_si512());
-    let is_x_inf: __mmask16 = _mm512_cmpeq_epi32_mask(ix, inf_bits);
-    let is_y_inf: __mmask16 = _mm512_cmpeq_epi32_mask(iy, inf_bits);
-    let is_x_nan: __mmask16 = _mm512_cmp_ps_mask(x, x, _CMP_UNORD_Q);
-    let is_y_nan: __mmask16 = _mm512_cmp_ps_mask(y, y, _CMP_UNORD_Q);
+        // -------------------------------------------------------------------------
+        // Condition masks for special cases
+        // -------------------------------------------------------------------------
+        let is_x_one: __mmask16 = _mm512_cmpeq_epi32_mask(x_bits, one_bits);
+        let is_y_zero: __mmask16 = _mm512_cmpeq_epi32_mask(iy, _mm512_setzero_si512());
+        let is_x_zero: __mmask16 = _mm512_cmpeq_epi32_mask(ix, _mm512_setzero_si512());
+        let is_x_inf: __mmask16 = _mm512_cmpeq_epi32_mask(ix, inf_bits);
+        let is_y_inf: __mmask16 = _mm512_cmpeq_epi32_mask(iy, inf_bits);
+        let is_x_nan: __mmask16 = _mm512_cmp_ps_mask(x, x, _CMP_UNORD_Q);
+        let is_y_nan: __mmask16 = _mm512_cmp_ps_mask(y, y, _CMP_UNORD_Q);
 
-    // Check if |y/x| > 2^26 (y dominates) — atan2 ≈ ±π/2
-    let iy_minus_ix = _mm512_sub_epi32(iy, ix);
-    let is_huge_ratio: __mmask16 = _mm512_cmpgt_epi32_mask(iy_minus_ix, huge_threshold);
-    let huge_or_y_inf: __mmask16 = is_huge_ratio | is_y_inf;
+        // Check if |y/x| > 2^26 (y dominates) — atan2 ≈ ±π/2
+        let iy_minus_ix = _mm512_sub_epi32(iy, ix);
+        let is_huge_ratio: __mmask16 = _mm512_cmpgt_epi32_mask(iy_minus_ix, huge_threshold);
+        let huge_or_y_inf: __mmask16 = is_huge_ratio | is_y_inf;
 
-    // Check if |y/x| < 2^-26 AND x < 0 — atan2 ≈ ±π (y negligible, negative x)
-    let iy_plus_threshold = _mm512_add_epi32(iy, huge_threshold);
-    let is_tiny_ratio: __mmask16 = _mm512_cmpgt_epi32_mask(ix, iy_plus_threshold);
-    let m_ge_2: __mmask16 = _mm512_cmpgt_epi32_mask(m, _mm512_set1_epi32(1));
-    let tiny_and_x_neg: __mmask16 = is_tiny_ratio & m_ge_2;
+        // Check if |y/x| < 2^-26 AND x < 0 — atan2 ≈ ±π (y negligible, negative x)
+        let iy_plus_threshold = _mm512_add_epi32(iy, huge_threshold);
+        let is_tiny_ratio: __mmask16 = _mm512_cmpgt_epi32_mask(ix, iy_plus_threshold);
+        let m_ge_2: __mmask16 = _mm512_cmpgt_epi32_mask(m, _mm512_set1_epi32(1));
+        let tiny_and_x_neg: __mmask16 = is_tiny_ratio & m_ge_2;
 
-    // -------------------------------------------------------------------------
-    // Case: NaN — if either input is NaN, return NaN (as x + y)
-    // -------------------------------------------------------------------------
-    let result_nan = _mm512_add_ps(x, y);
+        // -------------------------------------------------------------------------
+        // Case: NaN — if either input is NaN, return NaN (as x + y)
+        // -------------------------------------------------------------------------
+        let result_nan = _mm512_add_ps(x, y);
 
-    // -------------------------------------------------------------------------
-    // Case: x == 1.0 — return atan(y) directly
-    // -------------------------------------------------------------------------
-    let result_x_one = _mm512_atan_ps(y);
+        // -------------------------------------------------------------------------
+        // Case: x == 1.0 — return atan(y) directly
+        // -------------------------------------------------------------------------
+        let result_x_one = _mm512_atan_ps(y);
 
-    // -------------------------------------------------------------------------
-    // Case: y == ±0
-    //
-    //   m=0 (x≥0, y=+0): +0     m=1 (x≥0, y=-0): -0
-    //   m=2 (x<0, y=+0): +π     m=3 (x<0, y=-0): -π
-    // -------------------------------------------------------------------------
-    let result_y_zero = _mm512_mask_blend_ps(
-        m_01,
-        _mm512_mask_blend_ps(m_eq_2, _mm512_sub_ps(zero, pi_hi), pi_hi),
-        _mm512_mask_blend_ps(m_eq_0, neg_zero, y),
-    );
+        // -------------------------------------------------------------------------
+        // Case: y == ±0
+        //
+        //   m=0 (x≥0, y=+0): +0     m=1 (x≥0, y=-0): -0
+        //   m=2 (x<0, y=+0): +π     m=3 (x<0, y=-0): -π
+        // -------------------------------------------------------------------------
+        let result_y_zero = _mm512_mask_blend_ps(
+            m_01,
+            _mm512_mask_blend_ps(m_eq_2, _mm512_sub_ps(zero, pi_hi), pi_hi),
+            _mm512_mask_blend_ps(m_eq_0, neg_zero, y),
+        );
 
-    // -------------------------------------------------------------------------
-    // Case: x == ±0 (but y ≠ 0)
-    //
-    //   y > 0: +π/2     y < 0: -π/2
-    // -------------------------------------------------------------------------
-    let result_x_zero = _mm512_mask_blend_ps(m_02, _mm512_sub_ps(zero, pi_over_2), pi_over_2);
+        // -------------------------------------------------------------------------
+        // Case: x == ±0 (but y ≠ 0)
+        //
+        //   y > 0: +π/2     y < 0: -π/2
+        // -------------------------------------------------------------------------
+        let result_x_zero = _mm512_mask_blend_ps(m_02, _mm512_sub_ps(zero, pi_over_2), pi_over_2);
 
-    // -------------------------------------------------------------------------
-    // Case: x == ±∞
-    //
-    // If y is also ±∞:
-    //   m=0: +π/4    m=1: -π/4    m=2: +3π/4    m=3: -3π/4
-    //
-    // If y is finite:
-    //   m=0: +0      m=1: -0      m=2: +π       m=3: -π
-    // -------------------------------------------------------------------------
-    let result_both_inf = _mm512_mask_blend_ps(
-        m_01,
-        _mm512_mask_blend_ps(
-            m_eq_2,
-            _mm512_sub_ps(zero, three_pi_over_4),
-            three_pi_over_4,
-        ),
-        _mm512_mask_blend_ps(m_eq_0, _mm512_sub_ps(zero, pi_over_4), pi_over_4),
-    );
+        // -------------------------------------------------------------------------
+        // Case: x == ±∞
+        //
+        // If y is also ±∞:
+        //   m=0: +π/4    m=1: -π/4    m=2: +3π/4    m=3: -3π/4
+        //
+        // If y is finite:
+        //   m=0: +0      m=1: -0      m=2: +π       m=3: -π
+        // -------------------------------------------------------------------------
+        let result_both_inf = _mm512_mask_blend_ps(
+            m_01,
+            _mm512_mask_blend_ps(
+                m_eq_2,
+                _mm512_sub_ps(zero, three_pi_over_4),
+                three_pi_over_4,
+            ),
+            _mm512_mask_blend_ps(m_eq_0, _mm512_sub_ps(zero, pi_over_4), pi_over_4),
+        );
 
-    let result_x_inf_y_finite = _mm512_mask_blend_ps(
-        m_01,
-        _mm512_mask_blend_ps(m_eq_2, _mm512_sub_ps(zero, pi_hi), pi_hi),
-        _mm512_mask_blend_ps(m_eq_0, neg_zero, zero),
-    );
+        let result_x_inf_y_finite = _mm512_mask_blend_ps(
+            m_01,
+            _mm512_mask_blend_ps(m_eq_2, _mm512_sub_ps(zero, pi_hi), pi_hi),
+            _mm512_mask_blend_ps(m_eq_0, neg_zero, zero),
+        );
 
-    let result_x_inf = _mm512_mask_blend_ps(is_y_inf, result_x_inf_y_finite, result_both_inf);
+        let result_x_inf = _mm512_mask_blend_ps(is_y_inf, result_x_inf_y_finite, result_both_inf);
 
-    // -------------------------------------------------------------------------
-    // Case: |y/x| > 2^26 or y == ±∞ — return ±π/2
-    // -------------------------------------------------------------------------
-    let result_huge = _mm512_mask_blend_ps(m_02, _mm512_sub_ps(zero, pi_over_2), pi_over_2);
+        // -------------------------------------------------------------------------
+        // Case: |y/x| > 2^26 or y == ±∞ — return ±π/2
+        // -------------------------------------------------------------------------
+        let result_huge = _mm512_mask_blend_ps(m_02, _mm512_sub_ps(zero, pi_over_2), pi_over_2);
 
-    // -------------------------------------------------------------------------
-    // General case: compute z = atan(|y/x|), then apply quadrant correction
-    //
-    // If |y/x| < 2^-26 AND x < 0, use z = 0 (y is negligible)
-    //
-    // Quadrant corrections:
-    //   m=0: +z                    (Q1: result is positive, < π/2)
-    //   m=1: -z                    (Q4: result is negative, > -π/2)
-    //   m=2: π - (z - π_lo) ≈ π-z (Q2: result is positive, > π/2)
-    //   m=3: (z - π_lo) - π ≈ z-π (Q3: result is negative, < -π/2)
-    //
-    // The π_lo term is a two-sum correction for full precision.
-    // -------------------------------------------------------------------------
-    let ratio = _mm512_div_ps(abs_y, abs_x);
-    let z_computed = _mm512_atan_ps(ratio);
-    let z = _mm512_mask_blend_ps(tiny_and_x_neg, z_computed, zero);
+        // -------------------------------------------------------------------------
+        // General case: compute z = atan(|y/x|), then apply quadrant correction
+        //
+        // If |y/x| < 2^-26 AND x < 0, use z = 0 (y is negligible)
+        //
+        // Quadrant corrections:
+        //   m=0: +z                    (Q1: result is positive, < π/2)
+        //   m=1: -z                    (Q4: result is negative, > -π/2)
+        //   m=2: π - (z - π_lo) ≈ π-z (Q2: result is positive, > π/2)
+        //   m=3: (z - π_lo) - π ≈ z-π (Q3: result is negative, < -π/2)
+        //
+        // The π_lo term is a two-sum correction for full precision.
+        // -------------------------------------------------------------------------
+        let ratio = _mm512_div_ps(abs_y, abs_x);
+        let z_computed = _mm512_atan_ps(ratio);
+        let z = _mm512_mask_blend_ps(tiny_and_x_neg, z_computed, zero);
 
-    // Quadrant corrections
-    let result_m0 = z; // +z
-    let result_m1 = _mm512_sub_ps(zero, z); // -z
-    let result_m2 = _mm512_sub_ps(pi_hi, _mm512_sub_ps(z, pi_lo)); // π - (z - π_lo)
-    let result_m3 = _mm512_sub_ps(_mm512_sub_ps(z, pi_lo), pi_hi); // (z - π_lo) - π
+        // Quadrant corrections
+        let result_m0 = z; // +z
+        let result_m1 = _mm512_sub_ps(zero, z); // -z
+        let result_m2 = _mm512_sub_ps(pi_hi, _mm512_sub_ps(z, pi_lo)); // π - (z - π_lo)
+        let result_m3 = _mm512_sub_ps(_mm512_sub_ps(z, pi_lo), pi_hi); // (z - π_lo) - π
 
-    let result_general = _mm512_mask_blend_ps(
-        m_01,
-        _mm512_mask_blend_ps(m_eq_2, result_m3, result_m2),
-        _mm512_mask_blend_ps(m_eq_0, result_m1, result_m0),
-    );
+        let result_general = _mm512_mask_blend_ps(
+            m_01,
+            _mm512_mask_blend_ps(m_eq_2, result_m3, result_m2),
+            _mm512_mask_blend_ps(m_eq_0, result_m1, result_m0),
+        );
 
-    // -------------------------------------------------------------------------
-    // Merge all cases in priority order (lowest to highest)
-    // -------------------------------------------------------------------------
-    let mut result = result_general;
+        // -------------------------------------------------------------------------
+        // Merge all cases in priority order (lowest to highest)
+        // -------------------------------------------------------------------------
+        let mut result = result_general;
 
-    result = _mm512_mask_blend_ps(huge_or_y_inf, result, result_huge);
-    result = _mm512_mask_blend_ps(is_x_inf, result, result_x_inf);
-    result = _mm512_mask_blend_ps(is_x_zero, result, result_x_zero);
-    result = _mm512_mask_blend_ps(is_y_zero, result, result_y_zero);
-    result = _mm512_mask_blend_ps(is_x_one, result, result_x_one);
-    result = _mm512_mask_blend_ps(is_x_nan | is_y_nan, result, result_nan);
+        result = _mm512_mask_blend_ps(huge_or_y_inf, result, result_huge);
+        result = _mm512_mask_blend_ps(is_x_inf, result, result_x_inf);
+        result = _mm512_mask_blend_ps(is_x_zero, result, result_x_zero);
+        result = _mm512_mask_blend_ps(is_y_zero, result, result_y_zero);
+        result = _mm512_mask_blend_ps(is_x_one, result, result_x_one);
+        result = _mm512_mask_blend_ps(is_x_nan | is_y_nan, result, result_nan);
 
-    result
+        result
+    }
 }
 
 // ===========================================================================
@@ -297,155 +299,157 @@ pub(crate) unsafe fn _mm512_atan2_ps(y: __m512, x: __m512) -> __m512 {
 #[inline]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_atan2_pd(y: __m512d, x: __m512d) -> __m512d {
-    // -------------------------------------------------------------------------
-    // Broadcast constants
-    // -------------------------------------------------------------------------
-    let zero = _mm512_setzero_pd();
-    let neg_zero = _mm512_set1_pd(-0.0);
-    let pi_hi = _mm512_set1_pd(PI_HI_64);
-    let pi_lo = _mm512_set1_pd(PI_LO_64);
-    let pi_over_2 = _mm512_set1_pd(FRAC_PI_2_64);
-    let pi_over_4 = _mm512_set1_pd(FRAC_PI_4_64);
-    let three_pi_over_4 = _mm512_set1_pd(FRAC_3_PI_4_64);
+    unsafe {
+        // -------------------------------------------------------------------------
+        // Broadcast constants
+        // -------------------------------------------------------------------------
+        let zero = _mm512_setzero_pd();
+        let neg_zero = _mm512_set1_pd(-0.0);
+        let pi_hi = _mm512_set1_pd(PI_HI_64);
+        let pi_lo = _mm512_set1_pd(PI_LO_64);
+        let pi_over_2 = _mm512_set1_pd(FRAC_PI_2_64);
+        let pi_over_4 = _mm512_set1_pd(FRAC_PI_4_64);
+        let three_pi_over_4 = _mm512_set1_pd(FRAC_3_PI_4_64);
 
-    // Integer masks for bit manipulation (64-bit lanes)
-    let abs_mask = _mm512_set1_epi64(0x7FFF_FFFF_FFFF_FFFF_u64 as i64);
-    let one_bits = _mm512_set1_epi64(0x3FF0_0000_0000_0000_u64 as i64); // 1.0f64
-    let inf_bits = _mm512_set1_epi64(0x7FF0_0000_0000_0000_u64 as i64); // +∞
-    let huge_threshold = _mm512_set1_epi64(HUGE_RATIO_THRESHOLD_64);
+        // Integer masks for bit manipulation (64-bit lanes)
+        let abs_mask = _mm512_set1_epi64(0x7FFF_FFFF_FFFF_FFFF_u64 as i64);
+        let one_bits = _mm512_set1_epi64(0x3FF0_0000_0000_0000_u64 as i64); // 1.0f64
+        let inf_bits = _mm512_set1_epi64(0x7FF0_0000_0000_0000_u64 as i64); // +∞
+        let huge_threshold = _mm512_set1_epi64(HUGE_RATIO_THRESHOLD_64);
 
-    // -------------------------------------------------------------------------
-    // Extract bit representations and absolute values
-    // -------------------------------------------------------------------------
-    let x_bits = _mm512_castpd_si512(x);
-    let y_bits = _mm512_castpd_si512(y);
+        // -------------------------------------------------------------------------
+        // Extract bit representations and absolute values
+        // -------------------------------------------------------------------------
+        let x_bits = _mm512_castpd_si512(x);
+        let y_bits = _mm512_castpd_si512(y);
 
-    let ix = _mm512_and_si512(x_bits, abs_mask); // |x| as integer bits
-    let iy = _mm512_and_si512(y_bits, abs_mask); // |y| as integer bits
+        let ix = _mm512_and_si512(x_bits, abs_mask); // |x| as integer bits
+        let iy = _mm512_and_si512(y_bits, abs_mask); // |y| as integer bits
 
-    let abs_x = _mm512_abs_pd(x);
-    let abs_y = _mm512_abs_pd(y);
+        let abs_x = _mm512_abs_pd(x);
+        let abs_y = _mm512_abs_pd(y);
 
-    // -------------------------------------------------------------------------
-    // Compute quadrant index: m = 2·sign(x) + sign(y)
-    //
-    // For 64-bit lanes, we need to shift by 63 to get the sign bit.
-    // -------------------------------------------------------------------------
-    let sign_x = _mm512_srli_epi64(x_bits, 63);
-    let sign_y = _mm512_srli_epi64(y_bits, 63);
-    let m = _mm512_or_si512(_mm512_slli_epi64(sign_x, 1), sign_y);
+        // -------------------------------------------------------------------------
+        // Compute quadrant index: m = 2·sign(x) + sign(y)
+        //
+        // For 64-bit lanes, we need to shift by 63 to get the sign bit.
+        // -------------------------------------------------------------------------
+        let sign_x = _mm512_srli_epi64(x_bits, 63);
+        let sign_y = _mm512_srli_epi64(y_bits, 63);
+        let m = _mm512_or_si512(_mm512_slli_epi64(sign_x, 1), sign_y);
 
-    // Precompute masks for each m value (AVX-512 uses __mmask8 for 8 lanes)
-    let m_eq_0: __mmask8 = _mm512_cmpeq_epi64_mask(m, _mm512_setzero_si512());
-    let m_eq_1: __mmask8 = _mm512_cmpeq_epi64_mask(m, _mm512_set1_epi64(1));
-    let m_eq_2: __mmask8 = _mm512_cmpeq_epi64_mask(m, _mm512_set1_epi64(2));
-    let m_01: __mmask8 = m_eq_0 | m_eq_1;
-    let m_02: __mmask8 = m_eq_0 | m_eq_2;
+        // Precompute masks for each m value (AVX-512 uses __mmask8 for 8 lanes)
+        let m_eq_0: __mmask8 = _mm512_cmpeq_epi64_mask(m, _mm512_setzero_si512());
+        let m_eq_1: __mmask8 = _mm512_cmpeq_epi64_mask(m, _mm512_set1_epi64(1));
+        let m_eq_2: __mmask8 = _mm512_cmpeq_epi64_mask(m, _mm512_set1_epi64(2));
+        let m_01: __mmask8 = m_eq_0 | m_eq_1;
+        let m_02: __mmask8 = m_eq_0 | m_eq_2;
 
-    // -------------------------------------------------------------------------
-    // Condition masks for special cases
-    // -------------------------------------------------------------------------
-    let is_x_one: __mmask8 = _mm512_cmpeq_epi64_mask(x_bits, one_bits);
-    let is_y_zero: __mmask8 = _mm512_cmpeq_epi64_mask(iy, _mm512_setzero_si512());
-    let is_x_zero: __mmask8 = _mm512_cmpeq_epi64_mask(ix, _mm512_setzero_si512());
-    let is_x_inf: __mmask8 = _mm512_cmpeq_epi64_mask(ix, inf_bits);
-    let is_y_inf: __mmask8 = _mm512_cmpeq_epi64_mask(iy, inf_bits);
-    let is_x_nan: __mmask8 = _mm512_cmp_pd_mask(x, x, _CMP_UNORD_Q);
-    let is_y_nan: __mmask8 = _mm512_cmp_pd_mask(y, y, _CMP_UNORD_Q);
+        // -------------------------------------------------------------------------
+        // Condition masks for special cases
+        // -------------------------------------------------------------------------
+        let is_x_one: __mmask8 = _mm512_cmpeq_epi64_mask(x_bits, one_bits);
+        let is_y_zero: __mmask8 = _mm512_cmpeq_epi64_mask(iy, _mm512_setzero_si512());
+        let is_x_zero: __mmask8 = _mm512_cmpeq_epi64_mask(ix, _mm512_setzero_si512());
+        let is_x_inf: __mmask8 = _mm512_cmpeq_epi64_mask(ix, inf_bits);
+        let is_y_inf: __mmask8 = _mm512_cmpeq_epi64_mask(iy, inf_bits);
+        let is_x_nan: __mmask8 = _mm512_cmp_pd_mask(x, x, _CMP_UNORD_Q);
+        let is_y_nan: __mmask8 = _mm512_cmp_pd_mask(y, y, _CMP_UNORD_Q);
 
-    // Check if |y/x| > 2^60 (y dominates)
-    let iy_minus_ix = _mm512_sub_epi64(iy, ix);
-    let is_huge_ratio: __mmask8 = _mm512_cmpgt_epi64_mask(iy_minus_ix, huge_threshold);
-    let huge_or_y_inf: __mmask8 = is_huge_ratio | is_y_inf;
+        // Check if |y/x| > 2^60 (y dominates)
+        let iy_minus_ix = _mm512_sub_epi64(iy, ix);
+        let is_huge_ratio: __mmask8 = _mm512_cmpgt_epi64_mask(iy_minus_ix, huge_threshold);
+        let huge_or_y_inf: __mmask8 = is_huge_ratio | is_y_inf;
 
-    // Check if |y/x| < 2^-60 AND x < 0
-    let iy_plus_threshold = _mm512_add_epi64(iy, huge_threshold);
-    let is_tiny_ratio: __mmask8 = _mm512_cmpgt_epi64_mask(ix, iy_plus_threshold);
-    let m_ge_2: __mmask8 = _mm512_cmpgt_epi64_mask(m, _mm512_set1_epi64(1));
-    let tiny_and_x_neg: __mmask8 = is_tiny_ratio & m_ge_2;
+        // Check if |y/x| < 2^-60 AND x < 0
+        let iy_plus_threshold = _mm512_add_epi64(iy, huge_threshold);
+        let is_tiny_ratio: __mmask8 = _mm512_cmpgt_epi64_mask(ix, iy_plus_threshold);
+        let m_ge_2: __mmask8 = _mm512_cmpgt_epi64_mask(m, _mm512_set1_epi64(1));
+        let tiny_and_x_neg: __mmask8 = is_tiny_ratio & m_ge_2;
 
-    // -------------------------------------------------------------------------
-    // Case: NaN — if either input is NaN, return NaN (as x + y)
-    // -------------------------------------------------------------------------
-    let result_nan = _mm512_add_pd(x, y);
+        // -------------------------------------------------------------------------
+        // Case: NaN — if either input is NaN, return NaN (as x + y)
+        // -------------------------------------------------------------------------
+        let result_nan = _mm512_add_pd(x, y);
 
-    // -------------------------------------------------------------------------
-    // Case: x == 1.0 — return atan(y) directly
-    // -------------------------------------------------------------------------
-    let result_x_one = _mm512_atan_pd(y);
+        // -------------------------------------------------------------------------
+        // Case: x == 1.0 — return atan(y) directly
+        // -------------------------------------------------------------------------
+        let result_x_one = _mm512_atan_pd(y);
 
-    // -------------------------------------------------------------------------
-    // Case: y == ±0
-    // -------------------------------------------------------------------------
-    let result_y_zero = _mm512_mask_blend_pd(
-        m_01,
-        _mm512_mask_blend_pd(m_eq_2, _mm512_sub_pd(zero, pi_hi), pi_hi),
-        _mm512_mask_blend_pd(m_eq_0, neg_zero, y),
-    );
+        // -------------------------------------------------------------------------
+        // Case: y == ±0
+        // -------------------------------------------------------------------------
+        let result_y_zero = _mm512_mask_blend_pd(
+            m_01,
+            _mm512_mask_blend_pd(m_eq_2, _mm512_sub_pd(zero, pi_hi), pi_hi),
+            _mm512_mask_blend_pd(m_eq_0, neg_zero, y),
+        );
 
-    // -------------------------------------------------------------------------
-    // Case: x == ±0 (but y ≠ 0)
-    // -------------------------------------------------------------------------
-    let result_x_zero = _mm512_mask_blend_pd(m_02, _mm512_sub_pd(zero, pi_over_2), pi_over_2);
+        // -------------------------------------------------------------------------
+        // Case: x == ±0 (but y ≠ 0)
+        // -------------------------------------------------------------------------
+        let result_x_zero = _mm512_mask_blend_pd(m_02, _mm512_sub_pd(zero, pi_over_2), pi_over_2);
 
-    // -------------------------------------------------------------------------
-    // Case: x == ±∞
-    // -------------------------------------------------------------------------
-    let result_both_inf = _mm512_mask_blend_pd(
-        m_01,
-        _mm512_mask_blend_pd(
-            m_eq_2,
-            _mm512_sub_pd(zero, three_pi_over_4),
-            three_pi_over_4,
-        ),
-        _mm512_mask_blend_pd(m_eq_0, _mm512_sub_pd(zero, pi_over_4), pi_over_4),
-    );
+        // -------------------------------------------------------------------------
+        // Case: x == ±∞
+        // -------------------------------------------------------------------------
+        let result_both_inf = _mm512_mask_blend_pd(
+            m_01,
+            _mm512_mask_blend_pd(
+                m_eq_2,
+                _mm512_sub_pd(zero, three_pi_over_4),
+                three_pi_over_4,
+            ),
+            _mm512_mask_blend_pd(m_eq_0, _mm512_sub_pd(zero, pi_over_4), pi_over_4),
+        );
 
-    let result_x_inf_y_finite = _mm512_mask_blend_pd(
-        m_01,
-        _mm512_mask_blend_pd(m_eq_2, _mm512_sub_pd(zero, pi_hi), pi_hi),
-        _mm512_mask_blend_pd(m_eq_0, neg_zero, zero),
-    );
+        let result_x_inf_y_finite = _mm512_mask_blend_pd(
+            m_01,
+            _mm512_mask_blend_pd(m_eq_2, _mm512_sub_pd(zero, pi_hi), pi_hi),
+            _mm512_mask_blend_pd(m_eq_0, neg_zero, zero),
+        );
 
-    let result_x_inf = _mm512_mask_blend_pd(is_y_inf, result_x_inf_y_finite, result_both_inf);
+        let result_x_inf = _mm512_mask_blend_pd(is_y_inf, result_x_inf_y_finite, result_both_inf);
 
-    // -------------------------------------------------------------------------
-    // Case: |y/x| > 2^60 or y == ±∞ — return ±π/2
-    // -------------------------------------------------------------------------
-    let result_huge = _mm512_mask_blend_pd(m_02, _mm512_sub_pd(zero, pi_over_2), pi_over_2);
+        // -------------------------------------------------------------------------
+        // Case: |y/x| > 2^60 or y == ±∞ — return ±π/2
+        // -------------------------------------------------------------------------
+        let result_huge = _mm512_mask_blend_pd(m_02, _mm512_sub_pd(zero, pi_over_2), pi_over_2);
 
-    // -------------------------------------------------------------------------
-    // General case: compute z = atan(|y/x|), then apply quadrant correction
-    // -------------------------------------------------------------------------
-    let ratio = _mm512_div_pd(abs_y, abs_x);
-    let z_computed = _mm512_atan_pd(ratio);
-    let z = _mm512_mask_blend_pd(tiny_and_x_neg, z_computed, zero);
+        // -------------------------------------------------------------------------
+        // General case: compute z = atan(|y/x|), then apply quadrant correction
+        // -------------------------------------------------------------------------
+        let ratio = _mm512_div_pd(abs_y, abs_x);
+        let z_computed = _mm512_atan_pd(ratio);
+        let z = _mm512_mask_blend_pd(tiny_and_x_neg, z_computed, zero);
 
-    // Quadrant corrections
-    let result_m0 = z;
-    let result_m1 = _mm512_sub_pd(zero, z);
-    let result_m2 = _mm512_sub_pd(pi_hi, _mm512_sub_pd(z, pi_lo));
-    let result_m3 = _mm512_sub_pd(_mm512_sub_pd(z, pi_lo), pi_hi);
+        // Quadrant corrections
+        let result_m0 = z;
+        let result_m1 = _mm512_sub_pd(zero, z);
+        let result_m2 = _mm512_sub_pd(pi_hi, _mm512_sub_pd(z, pi_lo));
+        let result_m3 = _mm512_sub_pd(_mm512_sub_pd(z, pi_lo), pi_hi);
 
-    let result_general = _mm512_mask_blend_pd(
-        m_01,
-        _mm512_mask_blend_pd(m_eq_2, result_m3, result_m2),
-        _mm512_mask_blend_pd(m_eq_0, result_m1, result_m0),
-    );
+        let result_general = _mm512_mask_blend_pd(
+            m_01,
+            _mm512_mask_blend_pd(m_eq_2, result_m3, result_m2),
+            _mm512_mask_blend_pd(m_eq_0, result_m1, result_m0),
+        );
 
-    // -------------------------------------------------------------------------
-    // Merge all cases in priority order (lowest to highest)
-    // -------------------------------------------------------------------------
-    let mut result = result_general;
+        // -------------------------------------------------------------------------
+        // Merge all cases in priority order (lowest to highest)
+        // -------------------------------------------------------------------------
+        let mut result = result_general;
 
-    result = _mm512_mask_blend_pd(huge_or_y_inf, result, result_huge);
-    result = _mm512_mask_blend_pd(is_x_inf, result, result_x_inf);
-    result = _mm512_mask_blend_pd(is_x_zero, result, result_x_zero);
-    result = _mm512_mask_blend_pd(is_y_zero, result, result_y_zero);
-    result = _mm512_mask_blend_pd(is_x_one, result, result_x_one);
-    result = _mm512_mask_blend_pd(is_x_nan | is_y_nan, result, result_nan);
+        result = _mm512_mask_blend_pd(huge_or_y_inf, result, result_huge);
+        result = _mm512_mask_blend_pd(is_x_inf, result, result_x_inf);
+        result = _mm512_mask_blend_pd(is_x_zero, result, result_x_zero);
+        result = _mm512_mask_blend_pd(is_y_zero, result, result_y_zero);
+        result = _mm512_mask_blend_pd(is_x_one, result, result_x_one);
+        result = _mm512_mask_blend_pd(is_x_nan | is_y_nan, result, result_nan);
 
-    result
+        result
+    }
 }
 
 // ===========================================================================
