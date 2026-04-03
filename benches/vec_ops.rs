@@ -15,6 +15,7 @@ use criterion::{criterion_group, criterion_main};
 
 use ops::acos::{bench_acos_f32, bench_acos_f64};
 use ops::add::{bench_add_f32, bench_add_f64, bench_add_scalar_f32, bench_add_scalar_f64};
+use ops::asin::{bench_asin_f32, bench_asin_f64};
 use ops::div::{bench_div_f32, bench_div_f64};
 use ops::mul::{bench_mul_f32, bench_mul_f64, bench_mul_scalar_f32, bench_mul_scalar_f64};
 use ops::reduce::{
@@ -29,6 +30,8 @@ criterion_group!(
     // Transcendentals
     bench_acos_f32,
     bench_acos_f64,
+    bench_asin_f32,
+    bench_asin_f64,
     // Addition
     bench_add_f32,
     bench_add_f64,

@@ -4,6 +4,7 @@ use std::arch::x86_64::*;
 
 use crate::arch::avx512::abs::{_mm512_abs_pd, _mm512_abs_ps};
 use crate::arch::avx512::acos::{_mm512_acos_pd, _mm512_acos_ps};
+use crate::arch::avx512::asin::{_mm512_asin_pd, _mm512_asin_ps};
 use crate::arch::avx512::f32x16::F32x16;
 use crate::arch::avx512::f64x8::F64x8;
 use crate::math::VecMath;
@@ -28,6 +29,17 @@ impl VecMath<f32> for F32x16 {
             elements: unsafe { _mm512_acos_ps(self.elements) },
         }
     }
+
+    /// Arc sine of every lane via the two-range minimax approximation.
+    ///
+    /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
+    #[inline]
+    fn asin(&self) -> F32x16 {
+        F32x16 {
+            size: self.size,
+            elements: unsafe { _mm512_asin_ps(self.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x8 {
@@ -48,6 +60,17 @@ impl VecMath<f64> for F64x8 {
         F64x8 {
             size: self.size,
             elements: unsafe { _mm512_acos_pd(self.elements) },
+        }
+    }
+
+    /// Arc sine of every lane via the two-range minimax approximation.
+    ///
+    /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
+    #[inline]
+    fn asin(&self) -> F64x8 {
+        F64x8 {
+            size: self.size,
+            elements: unsafe { _mm512_asin_pd(self.elements) },
         }
     }
 }
