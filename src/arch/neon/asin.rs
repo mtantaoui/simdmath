@@ -186,7 +186,10 @@ pub(crate) unsafe fn vasin_f32(x: float32x4_t) -> float32x4_t {
         ));
 
         // Rounding correction: c = (z - df²) / (s + df)
-        let c = vdivq_f32(vsubq_f32(z_large, vmulq_f32(df, df)), vaddq_f32(s_large, df));
+        let c = vdivq_f32(
+            vsubq_f32(z_large, vmulq_f32(df, df)),
+            vaddq_f32(s_large, df),
+        );
 
         // Compute w = s·r(z) + c
         let w = vfmaq_f32(c, s_large, r_large);
@@ -346,7 +349,10 @@ pub(crate) unsafe fn vasin_f64(x: float64x2_t) -> float64x2_t {
         ));
 
         // Rounding correction: c = (z - df²) / (s + df)
-        let c = vdivq_f64(vsubq_f64(z_large, vmulq_f64(df, df)), vaddq_f64(s_large, df));
+        let c = vdivq_f64(
+            vsubq_f64(z_large, vmulq_f64(df, df)),
+            vaddq_f64(s_large, df),
+        );
 
         // Compute w = s·r(z) + c
         let w = vfmaq_f64(c, s_large, r_large);
