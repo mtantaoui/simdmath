@@ -5,3 +5,4 @@
 //! for numerical accuracy.
 
 pub(crate) mod acos;
+pub(crate) mod asin;
