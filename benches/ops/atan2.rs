@@ -1,6 +1,6 @@
 //! Benchmarks for two-argument arc tangent (atan2).
 
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box};
 use simdmath::math::VecMath;
 
 use super::common::*;

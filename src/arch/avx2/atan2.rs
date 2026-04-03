@@ -534,7 +534,10 @@ mod tests {
     fn atan2_neg_zero_pos_zero() {
         unsafe {
             let result = atan2_scalar(-0.0, 0.0);
-            assert!(result == 0.0 && result.is_sign_negative(), "expected -0.0, got {result}");
+            assert!(
+                result == 0.0 && result.is_sign_negative(),
+                "expected -0.0, got {result}"
+            );
         }
     }
 
@@ -575,7 +578,10 @@ mod tests {
             let pos = atan2_scalar(0.0, -1.0);
             assert!((pos - PI).abs() < TOL, "atan2(+0, -1) = {pos}, expected π");
             let neg = atan2_scalar(-0.0, -1.0);
-            assert!((neg - (-PI)).abs() < TOL, "atan2(-0, -1) = {neg}, expected -π");
+            assert!(
+                (neg - (-PI)).abs() < TOL,
+                "atan2(-0, -1) = {neg}, expected -π"
+            );
         }
     }
 
@@ -618,7 +624,10 @@ mod tests {
             assert!((r3 - 3.0 * FRAC_PI_4).abs() < TOL, "atan2(+∞, -∞) = {r3}");
 
             let r4 = atan2_scalar(f32::NEG_INFINITY, f32::NEG_INFINITY);
-            assert!((r4 - (-3.0 * FRAC_PI_4)).abs() < TOL, "atan2(-∞, -∞) = {r4}");
+            assert!(
+                (r4 - (-3.0 * FRAC_PI_4)).abs() < TOL,
+                "atan2(-∞, -∞) = {r4}"
+            );
         }
     }
 
@@ -802,7 +811,10 @@ mod tests {
     fn atan2_f64_neg_zero_pos_zero() {
         unsafe {
             let result = atan2_scalar_64(-0.0, 0.0);
-            assert!(result == 0.0 && result.is_sign_negative(), "expected -0.0, got {result}");
+            assert!(
+                result == 0.0 && result.is_sign_negative(),
+                "expected -0.0, got {result}"
+            );
         }
     }
 
@@ -952,8 +964,7 @@ mod tests {
         let mut worst_x: f64 = 0.0;
 
         for i in 0..2000 {
-            let theta =
-                (i as f64 / 1999.0) * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
+            let theta = (i as f64 / 1999.0) * 2.0 * std::f64::consts::PI - std::f64::consts::PI;
             for j in 0..100 {
                 let r = 0.001 + (j as f64) * 0.5;
                 let x = r * theta.cos();
