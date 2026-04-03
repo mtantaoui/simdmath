@@ -1,14 +1,14 @@
 //! NEON `Vec<T>` implementations of [`VecMath`].
 //!
-//! Each method uses [`unary_op`] to partition the slice into `F32x4` / `F64x2`
-//! chunks and applies the corresponding register-level [`VecMath`] method.
-//! The tail (when `len % LANE_COUNT != 0`) is handled automatically by
-//! `unary_op` via a masked load/store.
+//! Each method uses [`unary_op`] or [`binary_op`] to partition the slice into
+//! `F32x4` / `F64x2` chunks and applies the corresponding register-level
+//! [`VecMath`] method. The tail (when `len % LANE_COUNT != 0`) is handled
+//! automatically by `unary_op` / `binary_op` via a masked load/store.
 
 use crate::arch::neon::{f32x4, f32x4::F32x4};
 use crate::arch::neon::{f64x2, f64x2::F64x2};
 use crate::math::VecMath;
-use crate::ops::vec::unary_op;
+use crate::ops::vec::{binary_op, unary_op};
 
 impl VecMath<f32> for Vec<f32> {
     /// Absolute value of every element, processed 4 lanes at a time via NEON.
@@ -21,6 +21,10 @@ impl VecMath<f32> for Vec<f32> {
     ///
     /// Uses the three-range minimax rational approximation in
     /// [`crate::arch::neon::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
     #[inline]
     fn acos(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.acos())
@@ -30,6 +34,10 @@ impl VecMath<f32> for Vec<f32> {
     ///
     /// Uses the two-range minimax rational approximation in
     /// [`crate::arch::neon::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
     #[inline]
     fn asin(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.asin())
@@ -44,6 +52,17 @@ impl VecMath<f32> for Vec<f32> {
     fn atan(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.atan())
     }
+
+    /// Two-argument arc tangent: `atan2(self, other)` for every element,
+    /// processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 3 ULP** error across the entire domain.
+    #[inline]
+    fn atan2(&self, other: &Self) -> Vec<f32> {
+        binary_op::<f32, F32x4>(self, other, f32x4::LANE_COUNT, |y, x| y.atan2(&x))
+    }
 }
 
 impl VecMath<f64> for Vec<f64> {
@@ -57,6 +76,10 @@ impl VecMath<f64> for Vec<f64> {
     ///
     /// Uses the three-range minimax rational approximation in
     /// [`crate::arch::neon::acos`]. Lanes outside `[-1, 1]` produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
     #[inline]
     fn acos(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.acos())
@@ -66,6 +89,10 @@ impl VecMath<f64> for Vec<f64> {
     ///
     /// Uses the two-range minimax rational approximation in
     /// [`crate::arch::neon::asin`]. Lanes outside `[-1, 1]` produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the domain `[-1, 1]`.
     #[inline]
     fn asin(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.asin())
@@ -79,6 +106,17 @@ impl VecMath<f64> for Vec<f64> {
     #[inline]
     fn atan(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.atan())
+    }
+
+    /// Two-argument arc tangent: `atan2(self, other)` for every element,
+    /// processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn atan2(&self, other: &Self) -> Vec<f64> {
+        binary_op::<f64, F64x2>(self, other, f64x2::LANE_COUNT, |y, x| y.atan2(&x))
     }
 }
 

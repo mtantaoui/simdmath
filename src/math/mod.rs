@@ -98,6 +98,30 @@ pub trait VecMath<T> {
     /// // r ≈ [0.0, π/4, -π/4, π/2]
     /// ```
     fn atan(&self) -> Self;
+
+    /// Returns the two-argument arc tangent `atan2(self, other)` for every element.
+    ///
+    /// Computes the angle θ of the point `(other[i], self[i])` in radians,
+    /// measured counter-clockwise from the positive x-axis. The result is
+    /// in the range `(-π, π]`.
+    ///
+    /// This is equivalent to `self[i].atan2(other[i])` for each lane.
+    ///
+    /// # Precision
+    ///
+    /// - **f32**: ≤ 3 ULP accuracy
+    /// - **f64**: ≤ 2 ULP accuracy
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let y = vec![1.0f32, 1.0, -1.0, -1.0];
+    /// let x = vec![1.0f32, -1.0, 1.0, -1.0];
+    /// let r = y.atan2(&x);
+    /// // r ≈ [π/4, 3π/4, -π/4, -3π/4]
+    /// ```
+    fn atan2(&self, other: &Self) -> Self;
 }
 
 // ---------------------------------------------------------------------------

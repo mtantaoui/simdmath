@@ -7,3 +7,4 @@
 pub(crate) mod acos;
 pub(crate) mod asin;
 pub(crate) mod atan;
+pub(crate) mod atan2;
