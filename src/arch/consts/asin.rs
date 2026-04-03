@@ -7,7 +7,9 @@
 //! These constants are taken verbatim from musl libc's `asinf.c` and `asin.c`
 //! (which descend from Sun's fdlibm).
 
+// These are intentional musl libc constants with specific bit patterns, not approximations.
 #![allow(clippy::excessive_precision)]
+#![allow(clippy::approx_constant)]
 
 // ===========================================================================
 // f32 Constants (from musl asinf.c / fdlibm)

@@ -323,6 +323,7 @@ pub(crate) unsafe fn _mm256_asin_pd(x: __m256d) -> __m256d {
         //   q(z) = 1 + z · (Q_S1 + z · (Q_S2 + z · (Q_S3 + z · Q_S4)))
         // ---------------------------------------------------------------------
         #[inline(always)]
+        #[allow(clippy::too_many_arguments)]
         unsafe fn rational_r(
             z: __m256d,
             p_s0: __m256d,
