@@ -3,6 +3,7 @@
 pub mod acos;
 pub mod add;
 pub mod asin;
+pub mod atan;
 pub mod common;
 pub mod div;
 pub mod mul;

@@ -1,4 +1,5 @@
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+#[allow(unused_imports)]
 pub(crate) use avx512 as current;
 
 #[cfg(all(
@@ -6,6 +7,7 @@ pub(crate) use avx512 as current;
     not(target_feature = "avx512f"),
     target_feature = "avx2"
 ))]
+#[allow(unused_imports)]
 pub(crate) use avx2 as current;
 
 #[cfg(all(
@@ -14,6 +16,7 @@ pub(crate) use avx2 as current;
     not(target_feature = "avx2"),
     target_feature = "sse4.1"
 ))]
+#[allow(unused_imports)]
 pub(crate) use sse as current;
 
 #[cfg(all(
@@ -22,12 +25,15 @@ pub(crate) use sse as current;
     not(target_feature = "avx2"),
     not(target_feature = "sse4.1")
 ))]
+#[allow(unused_imports)]
 pub(crate) use scalar as current;
 
 #[cfg(target_arch = "aarch64")]
+#[allow(unused_imports)]
 pub(crate) use neon as current;
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[allow(unused_imports)]
 pub(crate) use scalar as current;
 
 #[cfg(all(

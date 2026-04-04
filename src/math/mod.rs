@@ -77,6 +77,27 @@ pub trait VecMath<T> {
     /// // r ≈ [0.0, π/6, -π/6, π/2]
     /// ```
     fn asin(&self) -> Self;
+
+    /// Returns the arc tangent (in radians) of every element.
+    ///
+    /// Computed via argument reduction followed by a minimax polynomial.
+    /// - **f32**: ≤ 3 ULP accuracy (single-range reduction)
+    /// - **f64**: ≤ 1 ULP accuracy (musl 4-range reduction)
+    ///
+    /// The domain is all real numbers; special values:
+    /// - `atan(±0)` = `±0`
+    /// - `atan(±∞)` = `±π/2`
+    /// - `atan(NaN)` = `NaN`
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![0.0f32, 1.0, -1.0, f32::INFINITY];
+    /// let r = a.atan();
+    /// // r ≈ [0.0, π/4, -π/4, π/2]
+    /// ```
+    fn atan(&self) -> Self;
 }
 
 // ---------------------------------------------------------------------------

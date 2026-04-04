@@ -8,10 +8,14 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 // ---------------------------------------------------------------------------
 
 /// Sizes for `f32` benchmarks (F32x8 — 8 lanes).
-pub const SIZES_F32: &[usize] = &[8, 64, 256, 1024];
+pub const SIZES_F32: &[usize] = &[
+    8, // , 64, 256, 1024
+];
 
 /// Sizes for `f64` benchmarks (F64x4 — 4 lanes).
-pub const SIZES_F64: &[usize] = &[4, 64, 256, 1024];
+pub const SIZES_F64: &[usize] = &[
+    4, // , 64, 256, 1024
+];
 
 // ---------------------------------------------------------------------------
 // Fixture builders

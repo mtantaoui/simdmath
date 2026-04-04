@@ -4,11 +4,10 @@
 //! approximation) and returns a register of the same type, preserving `size`
 //! so that the generic `unary_op` loop in [`crate::math`] can handle tails.
 
-use std::arch::x86_64::*;
-
 use crate::arch::avx2::abs::{_mm256_abs_pd, _mm256_abs_ps};
 use crate::arch::avx2::acos::{_mm256_acos_pd, _mm256_acos_ps};
 use crate::arch::avx2::asin::{_mm256_asin_pd, _mm256_asin_ps};
+use crate::arch::avx2::atan::{_mm256_atan_pd, _mm256_atan_ps};
 use crate::arch::avx2::f32x8::F32x8;
 use crate::arch::avx2::f64x4::F64x4;
 use crate::math::VecMath;
@@ -44,6 +43,19 @@ impl VecMath<f32> for F32x8 {
             elements: unsafe { _mm256_asin_ps(self.elements) },
         }
     }
+
+    /// Arc tangent of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 3 ULP** error across the entire domain.
+    #[inline]
+    fn atan(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_atan_ps(self.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x4 {
@@ -77,11 +89,25 @@ impl VecMath<f64> for F64x4 {
             elements: unsafe { _mm256_asin_pd(self.elements) },
         }
     }
+
+    /// Arc tangent of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain (musl 4-range reduction).
+    #[inline]
+    fn atan(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_atan_pd(self.elements) },
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::arch::x86_64::*;
 
     // ---- VecMath<f32> for F32x8 ----------------------------------------------
 

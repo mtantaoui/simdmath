@@ -7,6 +7,7 @@
 use crate::arch::neon::abs::{vabsq_f32_wrapper, vabsq_f64_wrapper};
 use crate::arch::neon::acos::{vacos_f32, vacos_f64};
 use crate::arch::neon::asin::{vasin_f32, vasin_f64};
+use crate::arch::neon::atan::{vatan_f32, vatan_f64};
 use crate::arch::neon::f32x4::F32x4;
 use crate::arch::neon::f64x2::F64x2;
 use crate::math::VecMath;
@@ -42,6 +43,19 @@ impl VecMath<f32> for F32x4 {
             elements: unsafe { vasin_f32(self.elements) },
         }
     }
+
+    /// Arc tangent of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 3 ULP** error across the entire domain.
+    #[inline]
+    fn atan(&self) -> F32x4 {
+        F32x4 {
+            size: self.size,
+            elements: unsafe { vatan_f32(self.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x2 {
@@ -73,6 +87,19 @@ impl VecMath<f64> for F64x2 {
         F64x2 {
             size: self.size,
             elements: unsafe { vasin_f64(self.elements) },
+        }
+    }
+
+    /// Arc tangent of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain (musl 4-range reduction).
+    #[inline]
+    fn atan(&self) -> F64x2 {
+        F64x2 {
+            size: self.size,
+            elements: unsafe { vatan_f64(self.elements) },
         }
     }
 }

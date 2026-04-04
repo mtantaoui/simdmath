@@ -36,6 +36,7 @@
 ///
 /// Implementors report whether a raw pointer meets the alignment requirement
 /// of their underlying register type (e.g. 32-byte alignment for `__m256`).
+#[allow(dead_code)]
 pub(crate) trait Align<T> {
     /// Returns `true` if `ptr` meets the alignment requirement of the SIMD
     /// register type.
@@ -58,6 +59,7 @@ pub(crate) trait Align<T> {
 ///
 /// [`load`](Self::load) automatically selects aligned or unaligned based on
 /// the pointer, and is the preferred entry point for full-register loads.
+#[allow(dead_code)]
 pub(crate) trait Load<T> {
     /// The concrete SIMD vector type produced by a load.
     type Output;
@@ -124,6 +126,7 @@ pub(crate) trait Load<T> {
 /// are the two entry points, mirroring [`Load::load`] and [`Load::load_partial`]
 /// respectively. Callers are responsible for choosing the right variant —
 /// `store_at` for full registers, `store_at_partial` for tails.
+#[allow(dead_code)]
 pub(crate) trait Store<T> {
     /// The concrete SIMD vector type (typically `Self`).
     type Output;
@@ -190,6 +193,7 @@ pub(crate) trait Store<T> {
 ///
 /// Implementors are architecture-specific SIMD vector structs (e.g. `F32x8`
 /// for AVX2). The associated [`Output`](Self::Output) type is typically `Self`.
+#[allow(dead_code)]
 pub(crate) trait Math {
     /// The type returned by every math operation (typically `Self`).
     type Output;
