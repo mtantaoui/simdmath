@@ -6,6 +6,19 @@
 //!
 //! NEON uses `vbslq` (bitwise select) for blending, which is equivalent to
 //! the `blendv` operations in x86 SIMD.
+//!
+//! # Precision
+//!
+//! Both implementations achieve **≤ 1 ULP** accuracy across the entire domain `[-1, 1]`.
+//!
+//! # Special Values
+//!
+//! | Input     | Output |
+//! |-----------|--------|
+//! | `1.0`     | `0.0`  |
+//! | `-1.0`    | `π`    |
+//! | `\|x\| > 1` | `NaN`  |
+//! | `NaN`     | `NaN`  |
 
 use std::arch::aarch64::*;
 
@@ -24,6 +37,10 @@ use crate::arch::neon::abs::{vabsq_f32_wrapper, vabsq_f64_wrapper};
 /// All 4 lanes are processed simultaneously without branches. The result
 /// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
 /// are computed unconditionally and merged with `vbslq_f32`.
+///
+/// # Precision
+///
+/// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
 ///
 /// # Safety
 /// `x` must be a valid `float32x4_t` register.
@@ -183,6 +200,10 @@ pub(crate) unsafe fn vacos_f32(x: float32x4_t) -> float32x4_t {
 /// All 2 lanes are processed simultaneously without branches. The result
 /// paths (small |x|, large positive, large negative, |x|=1, out-of-domain)
 /// are computed unconditionally and merged with `vbslq_f64`.
+///
+/// # Precision
+///
+/// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
 ///
 /// # Safety
 /// `x` must be a valid `float64x2_t` register.

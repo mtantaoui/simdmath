@@ -5,6 +5,7 @@ pub mod add;
 pub mod asin;
 pub mod atan;
 pub mod atan2;
+pub mod cbrt;
 pub mod common;
 pub mod div;
 pub mod mul;

@@ -19,6 +19,21 @@
 //! ```
 //!
 //! Both functions compile to a single `vpandnd` / `vpandnq` instruction.
+//!
+//! # Precision
+//!
+//! This operation is **exact (0 ULP error)**. It performs a bitwise AND to
+//! clear the sign bit without any rounding or arithmetic.
+//!
+//! # Special Values
+//!
+//! | Input  | Output |
+//! |--------|--------|
+//! | `+0.0` | `+0.0` |
+//! | `-0.0` | `+0.0` |
+//! | `+∞`   | `+∞`   |
+//! | `-∞`   | `+∞`   |
+//! | `NaN`  | `NaN` (sign bit cleared, payload preserved) |
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -29,6 +44,10 @@ use std::arch::x86_64::*;
 ///
 /// Casts to `__m512i`, clears the sign bit with `_mm512_andnot_epi32`, then
 /// casts back. This avoids the avx512dq dependency of `_mm512_andnot_ps`.
+///
+/// # Precision
+///
+/// **Exact (0 ULP error)** — purely bitwise operation with no rounding.
 ///
 /// # Safety
 /// `f` must be a valid `__m512` value; no alignment or memory constraints.
@@ -46,6 +65,10 @@ pub(crate) unsafe fn _mm512_abs_ps(f: __m512) -> __m512 {
 ///
 /// Casts to `__m512i`, clears the sign bit with `_mm512_andnot_epi64`, then
 /// casts back. This avoids the avx512dq dependency of `_mm512_andnot_pd`.
+///
+/// # Precision
+///
+/// **Exact (0 ULP error)** — purely bitwise operation with no rounding.
 ///
 /// # Safety
 /// `f` must be a valid `__m512d` value; no alignment or memory constraints.

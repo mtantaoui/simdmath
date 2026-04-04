@@ -14,6 +14,21 @@
 //!
 //! Both functions are `#[inline]` thin wrappers and compile to a single
 //! `vandnps` / `vandnpd` instruction on AVX2 targets.
+//!
+//! # Precision
+//!
+//! This operation is **exact (0 ULP error)**. It performs a bitwise AND to
+//! clear the sign bit without any rounding or arithmetic.
+//!
+//! # Special Values
+//!
+//! | Input  | Output |
+//! |--------|--------|
+//! | `+0.0` | `+0.0` |
+//! | `-0.0` | `+0.0` |
+//! | `+∞`   | `+∞`   |
+//! | `-∞`   | `+∞`   |
+//! | `NaN`  | `NaN` (sign bit cleared, payload preserved) |
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -25,6 +40,10 @@ use std::arch::x86_64::*;
 /// Clears the sign bit of every lane using `_mm256_andnot_ps`:
 /// `result = ~(-0.0) & f`, which leaves all other bits (exponent + mantissa)
 /// unchanged and forces the sign bit to zero.
+///
+/// # Precision
+///
+/// **Exact (0 ULP error)** — purely bitwise operation with no rounding.
 ///
 /// # Safety
 /// `f` must be a valid `__m256` value; no alignment or memory constraints.
@@ -42,6 +61,10 @@ pub(crate) unsafe fn _mm256_abs_ps(f: __m256) -> __m256 {
 /// Clears the sign bit of every lane using `_mm256_andnot_pd`:
 /// `result = ~(-0.0) & f`, which leaves all other bits (exponent + mantissa)
 /// unchanged and forces the sign bit to zero.
+///
+/// # Precision
+///
+/// **Exact (0 ULP error)** — purely bitwise operation with no rounding.
 ///
 /// # Safety
 /// `f` must be a valid `__m256d` value; no alignment or memory constraints.

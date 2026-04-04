@@ -122,6 +122,33 @@ pub trait VecMath<T> {
     /// // r ≈ [π/4, 3π/4, -π/4, -3π/4]
     /// ```
     fn atan2(&self, other: &Self) -> Self;
+
+    /// Returns the cube root of every element.
+    ///
+    /// Computed via a bit-manipulation trick for initial estimate followed by
+    /// Newton–Raphson refinement. Handles negative numbers correctly (cube root
+    /// of a negative number is the negative of the cube root of its absolute value).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain including subnormals.
+    ///
+    /// # Special values
+    ///
+    /// - `cbrt(±0)` = `±0`
+    /// - `cbrt(±∞)` = `±∞`
+    /// - `cbrt(NaN)` = `NaN`
+    /// - `cbrt(-x)` = `-cbrt(x)` for all x
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![1.0f32, 8.0, 27.0, -8.0];
+    /// let r = a.cbrt();
+    /// // r ≈ [1.0, 2.0, 3.0, -2.0]
+    /// ```
+    fn cbrt(&self) -> Self;
 }
 
 // ---------------------------------------------------------------------------
