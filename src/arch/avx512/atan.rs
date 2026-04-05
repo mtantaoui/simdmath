@@ -566,8 +566,8 @@ mod tests {
     fn atan_ps_all_lanes_independent() {
         unsafe {
             let input = _mm512_setr_ps(
-                -3.0, -2.0, -1.5, -1.0, -0.5, -0.25, -0.1, 0.0, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0,
-                3.0, 4.0,
+                -3.0, -2.0, -1.5, -1.0, -0.5, -0.25, -0.1, 0.0, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0,
+                4.0,
             );
             let result = extract_f32(_mm512_atan_ps(input));
             let expected: [f32; 16] = [

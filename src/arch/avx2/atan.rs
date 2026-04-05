@@ -784,7 +784,9 @@ mod tests {
             for i in -500_000i32..=500_000 {
                 let x = (i as f32) * 0.00002; // [-10, 10]
                 let expected = x.atan();
-                if !expected.is_finite() { continue; }
+                if !expected.is_finite() {
+                    continue;
+                }
 
                 let input = _mm256_set1_ps(x);
                 let result = extract_f32(_mm256_atan_ps(input))[0];
