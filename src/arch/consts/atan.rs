@@ -10,7 +10,9 @@
 //!
 //! All constants are taken verbatim from **musl libc `atan.c`** (fdlibm descent).
 
+// These are intentional musl libc constants with specific bit patterns, not approximations.
 #![allow(clippy::excessive_precision)]
+#![allow(clippy::approx_constant)]
 
 // ===========================================================================
 // f32 Constants
