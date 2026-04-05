@@ -6,6 +6,7 @@ use crate::arch::avx512::abs::{_mm512_abs_pd, _mm512_abs_ps};
 use crate::arch::avx512::acos::{_mm512_acos_pd, _mm512_acos_ps};
 use crate::arch::avx512::asin::{_mm512_asin_pd, _mm512_asin_ps};
 use crate::arch::avx512::atan::{_mm512_atan_pd, _mm512_atan_ps};
+use crate::arch::avx512::atan2::{_mm512_atan2_pd, _mm512_atan2_ps};
 use crate::arch::avx512::f32x16::F32x16;
 use crate::arch::avx512::f64x8::F64x8;
 use crate::math::VecMath;
@@ -23,6 +24,10 @@ impl VecMath<f32> for F32x16 {
     /// Arc cosine of every lane via the three-range minimax approximation.
     ///
     /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
     #[inline]
     fn acos(&self) -> F32x16 {
         F32x16 {
@@ -34,6 +39,10 @@ impl VecMath<f32> for F32x16 {
     /// Arc sine of every lane via the two-range minimax approximation.
     ///
     /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
     #[inline]
     fn asin(&self) -> F32x16 {
         F32x16 {
@@ -54,6 +63,19 @@ impl VecMath<f32> for F32x16 {
             elements: unsafe { _mm512_atan_ps(self.elements) },
         }
     }
+
+    /// Two-argument arc tangent: `atan2(self, other)` for every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 3 ULP** error across the entire domain.
+    #[inline]
+    fn atan2(&self, other: &F32x16) -> F32x16 {
+        F32x16 {
+            size: self.size,
+            elements: unsafe { _mm512_atan2_ps(self.elements, other.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x8 {
@@ -69,6 +91,10 @@ impl VecMath<f64> for F64x8 {
     /// Arc cosine of every lane via the three-range minimax approximation.
     ///
     /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
     #[inline]
     fn acos(&self) -> F64x8 {
         F64x8 {
@@ -80,6 +106,10 @@ impl VecMath<f64> for F64x8 {
     /// Arc sine of every lane via the two-range minimax approximation.
     ///
     /// Lanes outside `[-1, 1]` or `NaN` inputs produce `NaN`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain `[-1, 1]`.
     #[inline]
     fn asin(&self) -> F64x8 {
         F64x8 {
@@ -98,6 +128,19 @@ impl VecMath<f64> for F64x8 {
         F64x8 {
             size: self.size,
             elements: unsafe { _mm512_atan_pd(self.elements) },
+        }
+    }
+
+    /// Two-argument arc tangent: `atan2(self, other)` for every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn atan2(&self, other: &F64x8) -> F64x8 {
+        F64x8 {
+            size: self.size,
+            elements: unsafe { _mm512_atan2_pd(self.elements, other.elements) },
         }
     }
 }
