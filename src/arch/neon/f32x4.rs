@@ -155,8 +155,8 @@ impl Load<f32> for F32x4 {
 
         unsafe {
             let mut arr = [0.0f32; LANE_COUNT];
-            for i in 0..size {
-                arr[i] = *ptr.add(i);
+            for (i, slot) in arr.iter_mut().enumerate().take(size) {
+                *slot = *ptr.add(i);
             }
             Self {
                 elements: vld1q_f32(arr.as_ptr()),
@@ -262,8 +262,8 @@ impl Store<f32> for F32x4 {
         unsafe {
             let mut arr = [0.0f32; LANE_COUNT];
             vst1q_f32(arr.as_mut_ptr(), self.elements);
-            for i in 0..self.size {
-                *ptr.add(i) = arr[i];
+            for (i, &val) in arr.iter().enumerate().take(self.size) {
+                *ptr.add(i) = val;
             }
         }
     }
@@ -530,12 +530,12 @@ mod tests {
     #[test]
     fn broadcast_fills_all_lanes_with_value() {
         unsafe {
-            let v = F32x4::broadcast(3.14);
+            let v = F32x4::broadcast(3.5);
             assert_eq!(v.size, LANE_COUNT);
             let mut out = [0.0f32; LANE_COUNT];
             vst1q_f32(out.as_mut_ptr(), v.elements);
             for lane in out {
-                assert!((lane - 3.14f32).abs() < f32::EPSILON);
+                assert!((lane - 3.5f32).abs() < f32::EPSILON);
             }
         }
     }
@@ -607,8 +607,8 @@ mod tests {
                     assert_eq!(out[i], src[i], "lane {i} mismatch for size={size}");
                 }
                 // Inactive lanes should be zero.
-                for i in size..LANE_COUNT {
-                    assert_eq!(out[i], 0.0, "lane {i} not zeroed for size={size}");
+                for (i, &val) in out.iter().enumerate().take(LANE_COUNT).skip(size) {
+                    assert_eq!(val, 0.0, "lane {i} not zeroed for size={size}");
                 }
             }
         }
@@ -631,21 +631,20 @@ mod tests {
 
     #[test]
     fn store_at_partial_writes_only_active_lanes() {
+        let expected_vals = [1.0f32, 2.0, 3.0, 4.0];
         for size in 1..LANE_COUNT {
             unsafe {
                 let v = F32x4 {
                     size,
-                    elements: vld1q_f32([1.0f32, 2.0, 3.0, 4.0].as_ptr()),
+                    elements: vld1q_f32(expected_vals.as_ptr()),
                 };
                 let mut dst = [0.0f32; LANE_COUNT];
                 v.store_at_partial(dst.as_mut_ptr());
                 // Active lanes should be written.
-                for i in 0..size {
-                    assert_eq!(dst[i], (i + 1) as f32, "lane {i} mismatch for size={size}");
-                }
+                assert_eq!(&dst[..size], &expected_vals[..size], "active lanes mismatch for size={size}");
                 // Inactive lanes should remain zero.
-                for i in size..LANE_COUNT {
-                    assert_eq!(dst[i], 0.0, "lane {i} written for size={size}");
+                for (i, &val) in dst.iter().enumerate().take(LANE_COUNT).skip(size) {
+                    assert_eq!(val, 0.0, "lane {i} written for size={size}");
                 }
             }
         }

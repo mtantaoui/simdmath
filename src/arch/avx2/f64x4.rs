@@ -548,8 +548,8 @@ mod tests {
                 for i in 0..size {
                     assert_eq!(out[i], src[i], "size={size}: lane {i} should match source");
                 }
-                for i in size..LANE_COUNT {
-                    assert_eq!(out[i], 0.0, "size={size}: lane {i} should be zeroed");
+                for (i, &val) in out.iter().enumerate().take(LANE_COUNT).skip(size) {
+                    assert_eq!(val, 0.0, "size={size}: lane {i} should be zeroed");
                 }
             }
         }
@@ -583,12 +583,12 @@ mod tests {
     #[test]
     fn broadcast_fills_all_lanes_with_value() {
         unsafe {
-            let v = F64x4::broadcast(2.718);
+            let v = F64x4::broadcast(2.5);
             assert_eq!(v.size, LANE_COUNT);
             let mut out = [0.0f64; LANE_COUNT];
             _mm256_storeu_pd(out.as_mut_ptr(), v.elements);
             for lane in out {
-                assert!((lane - 2.718f64).abs() < f64::EPSILON);
+                assert!((lane - 2.5f64).abs() < f64::EPSILON);
             }
         }
     }
@@ -630,8 +630,8 @@ mod tests {
             for i in 0..size {
                 assert_eq!(dst[i], src[i], "size={size}: lane {i} should be written");
             }
-            for i in size..LANE_COUNT {
-                assert_eq!(dst[i], -1.0, "size={size}: lane {i} should be untouched");
+            for (i, &val) in dst.iter().enumerate().take(LANE_COUNT).skip(size) {
+                assert_eq!(val, -1.0, "size={size}: lane {i} should be untouched");
             }
         }
     }
