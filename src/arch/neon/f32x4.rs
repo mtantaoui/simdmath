@@ -641,7 +641,11 @@ mod tests {
                 let mut dst = [0.0f32; LANE_COUNT];
                 v.store_at_partial(dst.as_mut_ptr());
                 // Active lanes should be written.
-                assert_eq!(&dst[..size], &expected_vals[..size], "active lanes mismatch for size={size}");
+                assert_eq!(
+                    &dst[..size],
+                    &expected_vals[..size],
+                    "active lanes mismatch for size={size}"
+                );
                 // Inactive lanes should remain zero.
                 for (i, &val) in dst.iter().enumerate().take(LANE_COUNT).skip(size) {
                     assert_eq!(val, 0.0, "lane {i} written for size={size}");
