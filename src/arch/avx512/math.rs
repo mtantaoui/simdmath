@@ -1,7 +1,5 @@
 //! AVX-512F implementations of [`VecMath`] for the `F32x16` and `F64x8` register types.
 
-use std::arch::x86_64::*;
-
 use crate::arch::avx512::abs::{_mm512_abs_pd, _mm512_abs_ps};
 use crate::arch::avx512::acos::{_mm512_acos_pd, _mm512_acos_ps};
 use crate::arch::avx512::asin::{_mm512_asin_pd, _mm512_asin_ps};

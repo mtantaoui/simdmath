@@ -3,7 +3,7 @@
 use crate::arch::avx512::{f32x16, f32x16::F32x16};
 use crate::arch::avx512::{f64x8, f64x8::F64x8};
 use crate::math::VecMath;
-use crate::ops::vec::unary_op;
+use crate::ops::vec::{binary_op, unary_op};
 
 impl VecMath<f32> for Vec<f32> {
     /// Absolute value of every element, processed 16 lanes at a time via AVX-512.
@@ -38,6 +38,17 @@ impl VecMath<f32> for Vec<f32> {
     #[inline]
     fn atan(&self) -> Vec<f32> {
         unary_op::<f32, F32x16>(self, f32x16::LANE_COUNT, |v| v.atan())
+    }
+
+    /// Two-argument arc tangent: `atan2(self, other)` for every element,
+    /// processed 16 lanes at a time via AVX-512.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 3 ULP** error across the entire domain.
+    #[inline]
+    fn atan2(&self, other: &Self) -> Vec<f32> {
+        binary_op::<f32, F32x16>(self, other, f32x16::LANE_COUNT, |y, x| y.atan2(&x))
     }
 }
 
@@ -74,6 +85,17 @@ impl VecMath<f64> for Vec<f64> {
     #[inline]
     fn atan(&self) -> Vec<f64> {
         unary_op::<f64, F64x8>(self, f64x8::LANE_COUNT, |v| v.atan())
+    }
+
+    /// Two-argument arc tangent: `atan2(self, other)` for every element,
+    /// processed 8 lanes at a time via AVX-512.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn atan2(&self, other: &Self) -> Vec<f64> {
+        binary_op::<f64, F64x8>(self, other, f64x8::LANE_COUNT, |y, x| y.atan2(&x))
     }
 }
 

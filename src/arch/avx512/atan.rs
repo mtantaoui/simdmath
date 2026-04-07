@@ -86,83 +86,93 @@ use crate::arch::consts::atan::{
 #[inline]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_atan_ps(x: __m512) -> __m512 {
-    // ---------------------------------------------------------------------
-    // Broadcast constants to SIMD registers
-    // ---------------------------------------------------------------------
-    let one = _mm512_set1_ps(1.0);
-    let frac_pi_2 = _mm512_set1_ps(FRAC_PI_2_32);
+    unsafe {
+        // ---------------------------------------------------------------------
+        // Broadcast constants to SIMD registers
+        // ---------------------------------------------------------------------
+        let one = _mm512_set1_ps(1.0);
+        let frac_pi_2 = _mm512_set1_ps(FRAC_PI_2_32);
 
-    // Polynomial coefficients
-    let p0 = _mm512_set1_ps(ATAN_P0_32);
-    let p1 = _mm512_set1_ps(ATAN_P1_32);
-    let p2 = _mm512_set1_ps(ATAN_P2_32);
-    let p3 = _mm512_set1_ps(ATAN_P3_32);
-    let p4 = _mm512_set1_ps(ATAN_P4_32);
-    let p5 = _mm512_set1_ps(ATAN_P5_32);
-    let p6 = _mm512_set1_ps(ATAN_P6_32);
-    let p7 = _mm512_set1_ps(ATAN_P7_32);
-    let p8 = _mm512_set1_ps(ATAN_P8_32);
+        // Polynomial coefficients
+        let p0 = _mm512_set1_ps(ATAN_P0_32);
+        let p1 = _mm512_set1_ps(ATAN_P1_32);
+        let p2 = _mm512_set1_ps(ATAN_P2_32);
+        let p3 = _mm512_set1_ps(ATAN_P3_32);
+        let p4 = _mm512_set1_ps(ATAN_P4_32);
+        let p5 = _mm512_set1_ps(ATAN_P5_32);
+        let p6 = _mm512_set1_ps(ATAN_P6_32);
+        let p7 = _mm512_set1_ps(ATAN_P7_32);
+        let p8 = _mm512_set1_ps(ATAN_P8_32);
 
-    // ---------------------------------------------------------------------
-    // Extract sign and compute |x|
-    //
-    // We extract the sign bit directly to preserve -0.0 correctly.
-    // atan(-x) = -atan(x), so we work with |x| and restore sign at end.
-    // ---------------------------------------------------------------------
-    let sign_mask = _mm512_set1_ps(-0.0); // 0x80000000 in each lane
-    let sign_bits = _mm512_and_ps(x, sign_mask);
-    let abs_x = _mm512_abs_ps(x);
+        // ---------------------------------------------------------------------
+        // Extract sign and compute |x|
+        //
+        // We extract the sign bit directly to preserve -0.0 correctly.
+        // atan(-x) = -atan(x), so we work with |x| and restore sign at end.
+        //
+        // Note: _mm512_and_ps requires avx512dq, so we use integer AND instead.
+        // ---------------------------------------------------------------------
+        let sign_mask_i = _mm512_set1_epi32(0x8000_0000_u32 as i32);
+        let x_i = _mm512_castps_si512(x);
+        let sign_bits_i = _mm512_and_epi32(x_i, sign_mask_i);
+        let sign_bits = _mm512_castsi512_ps(sign_bits_i);
+        let abs_x = _mm512_abs_ps(x);
 
-    // ---------------------------------------------------------------------
-    // Argument reduction
-    //
-    // For |x| > 1: atan(|x|) = π/2 - atan(1/|x|)
-    // ---------------------------------------------------------------------
-    let needs_reduction = _mm512_cmp_ps_mask(abs_x, one, _CMP_GT_OQ);
+        // ---------------------------------------------------------------------
+        // Argument reduction
+        //
+        // For |x| > 1: atan(|x|) = π/2 - atan(1/|x|)
+        // ---------------------------------------------------------------------
+        let needs_reduction = _mm512_cmp_ps_mask(abs_x, one, _CMP_GT_OQ);
 
-    // Reduced argument: use 1/|x| if |x| > 1, otherwise |x|
-    let recip = _mm512_div_ps(one, abs_x);
-    let t = _mm512_mask_blend_ps(needs_reduction, abs_x, recip);
+        // Reduced argument: use 1/|x| if |x| > 1, otherwise |x|
+        let recip = _mm512_div_ps(one, abs_x);
+        let t = _mm512_mask_blend_ps(needs_reduction, abs_x, recip);
 
-    // ---------------------------------------------------------------------
-    // Polynomial evaluation using Horner's method
-    //
-    // atan(t) ≈ t · (P0 + t² · (P1 + t² · (P2 + t² · (P3 + ...))))
-    //
-    // We evaluate the polynomial in t² to exploit the odd symmetry of atan.
-    // ---------------------------------------------------------------------
-    let t2 = _mm512_mul_ps(t, t);
+        // ---------------------------------------------------------------------
+        // Polynomial evaluation using Horner's method
+        //
+        // atan(t) ≈ t · (P0 + t² · (P1 + t² · (P2 + t² · (P3 + ...))))
+        //
+        // We evaluate the polynomial in t² to exploit the odd symmetry of atan.
+        // ---------------------------------------------------------------------
+        let t2 = _mm512_mul_ps(t, t);
 
-    // Horner's method from highest to lowest coefficient
-    let mut u = p8;
-    u = _mm512_fmadd_ps(u, t2, p7); // P7 + t² · P8
-    u = _mm512_fmadd_ps(u, t2, p6); // P6 + t² · (P7 + ...)
-    u = _mm512_fmadd_ps(u, t2, p5); // P5 + ...
-    u = _mm512_fmadd_ps(u, t2, p4); // P4 + ...
-    u = _mm512_fmadd_ps(u, t2, p3); // P3 + ...
-    u = _mm512_fmadd_ps(u, t2, p2); // P2 + ...
-    u = _mm512_fmadd_ps(u, t2, p1); // P1 + ...
-    u = _mm512_fmadd_ps(u, t2, p0); // P0 + ...
+        // Horner's method from highest to lowest coefficient
+        let mut u = p8;
+        u = _mm512_fmadd_ps(u, t2, p7); // P7 + t² · P8
+        u = _mm512_fmadd_ps(u, t2, p6); // P6 + t² · (P7 + ...)
+        u = _mm512_fmadd_ps(u, t2, p5); // P5 + ...
+        u = _mm512_fmadd_ps(u, t2, p4); // P4 + ...
+        u = _mm512_fmadd_ps(u, t2, p3); // P3 + ...
+        u = _mm512_fmadd_ps(u, t2, p2); // P2 + ...
+        u = _mm512_fmadd_ps(u, t2, p1); // P1 + ...
+        u = _mm512_fmadd_ps(u, t2, p0); // P0 + ...
 
-    // Multiply by t to get the final polynomial value
-    let poly_result = _mm512_mul_ps(u, t);
+        // Multiply by t to get the final polynomial value
+        let poly_result = _mm512_mul_ps(u, t);
 
-    // ---------------------------------------------------------------------
-    // Apply argument reduction correction
-    //
-    // If |x| > 1: atan(|x|) = π/2 - atan(1/|x|) = π/2 - poly_result
-    // Otherwise: atan(|x|) = poly_result
-    // ---------------------------------------------------------------------
-    let reduced_result = _mm512_sub_ps(frac_pi_2, poly_result);
-    let abs_result = _mm512_mask_blend_ps(needs_reduction, poly_result, reduced_result);
+        // ---------------------------------------------------------------------
+        // Apply argument reduction correction
+        //
+        // If |x| > 1: atan(|x|) = π/2 - atan(1/|x|) = π/2 - poly_result
+        // Otherwise: atan(|x|) = poly_result
+        // ---------------------------------------------------------------------
+        let reduced_result = _mm512_sub_ps(frac_pi_2, poly_result);
+        let abs_result = _mm512_mask_blend_ps(needs_reduction, poly_result, reduced_result);
 
-    // ---------------------------------------------------------------------
-    // Restore sign: atan(-x) = -atan(x)
-    //
-    // XOR the result with the original sign bits to restore the sign.
-    // This correctly handles -0.0 → -0.0.
-    // ---------------------------------------------------------------------
-    _mm512_xor_ps(abs_result, sign_bits)
+        // ---------------------------------------------------------------------
+        // Restore sign: atan(-x) = -atan(x)
+        //
+        // XOR the result with the original sign bits to restore the sign.
+        // This correctly handles -0.0 → -0.0.
+        //
+        // Note: _mm512_xor_ps requires avx512dq, so we use integer XOR instead.
+        // ---------------------------------------------------------------------
+        let abs_result_i = _mm512_castps_si512(abs_result);
+        let result_i = _mm512_xor_epi32(abs_result_i, sign_bits_i);
+        _mm512_castsi512_ps(result_i)
+    }
 }
 
 // ===========================================================================
@@ -197,185 +207,195 @@ pub(crate) unsafe fn _mm512_atan_ps(x: __m512) -> __m512 {
 #[inline]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_atan_pd(x: __m512d) -> __m512d {
-    // ---------------------------------------------------------------------
-    // Broadcast constants
-    // ---------------------------------------------------------------------
-    let one = _mm512_set1_pd(1.0);
-    let two = _mm512_set1_pd(2.0);
-    let three = _mm512_set1_pd(3.0);
+    unsafe {
+        // ---------------------------------------------------------------------
+        // Broadcast constants
+        // ---------------------------------------------------------------------
+        let one = _mm512_set1_pd(1.0);
+        let two = _mm512_set1_pd(2.0);
+        let three = _mm512_set1_pd(3.0);
 
-    // Polynomial coefficients (musl aT[])
-    let at0 = _mm512_set1_pd(AT0);
-    let at1 = _mm512_set1_pd(AT1);
-    let at2 = _mm512_set1_pd(AT2);
-    let at3 = _mm512_set1_pd(AT3);
-    let at4 = _mm512_set1_pd(AT4);
-    let at5 = _mm512_set1_pd(AT5);
-    let at6 = _mm512_set1_pd(AT6);
-    let at7 = _mm512_set1_pd(AT7);
-    let at8 = _mm512_set1_pd(AT8);
-    let at9 = _mm512_set1_pd(AT9);
-    let at10 = _mm512_set1_pd(AT10);
+        // Polynomial coefficients (musl aT[])
+        let at0 = _mm512_set1_pd(AT0);
+        let at1 = _mm512_set1_pd(AT1);
+        let at2 = _mm512_set1_pd(AT2);
+        let at3 = _mm512_set1_pd(AT3);
+        let at4 = _mm512_set1_pd(AT4);
+        let at5 = _mm512_set1_pd(AT5);
+        let at6 = _mm512_set1_pd(AT6);
+        let at7 = _mm512_set1_pd(AT7);
+        let at8 = _mm512_set1_pd(AT8);
+        let at9 = _mm512_set1_pd(AT9);
+        let at10 = _mm512_set1_pd(AT10);
 
-    // Two-sum offsets for each reduction range
-    let hi0 = _mm512_set1_pd(ATANHI_0);
-    let lo0 = _mm512_set1_pd(ATANLO_0);
-    let hi1 = _mm512_set1_pd(ATANHI_1);
-    let lo1 = _mm512_set1_pd(ATANLO_1);
-    let hi2 = _mm512_set1_pd(ATANHI_2);
-    let lo2 = _mm512_set1_pd(ATANLO_2);
-    let hi3 = _mm512_set1_pd(ATANHI_3);
-    let lo3 = _mm512_set1_pd(ATANLO_3);
+        // Two-sum offsets for each reduction range
+        let hi0 = _mm512_set1_pd(ATANHI_0);
+        let lo0 = _mm512_set1_pd(ATANLO_0);
+        let hi1 = _mm512_set1_pd(ATANHI_1);
+        let lo1 = _mm512_set1_pd(ATANLO_1);
+        let hi2 = _mm512_set1_pd(ATANHI_2);
+        let lo2 = _mm512_set1_pd(ATANLO_2);
+        let hi3 = _mm512_set1_pd(ATANHI_3);
+        let lo3 = _mm512_set1_pd(ATANLO_3);
 
-    // Range thresholds
-    let thr0 = _mm512_set1_pd(ATAN_THRESH_0); // 7/16 = 0.4375
-    let thr1 = _mm512_set1_pd(ATAN_THRESH_1); // 11/16 = 0.6875
-    let thr2 = _mm512_set1_pd(ATAN_THRESH_2); // 19/16 = 1.1875
-    let thr3 = _mm512_set1_pd(ATAN_THRESH_3); // 39/16 = 2.4375
+        // Range thresholds
+        let thr0 = _mm512_set1_pd(ATAN_THRESH_0); // 7/16 = 0.4375
+        let thr1 = _mm512_set1_pd(ATAN_THRESH_1); // 11/16 = 0.6875
+        let thr2 = _mm512_set1_pd(ATAN_THRESH_2); // 19/16 = 1.1875
+        let thr3 = _mm512_set1_pd(ATAN_THRESH_3); // 39/16 = 2.4375
 
-    // ---------------------------------------------------------------------
-    // Extract sign and compute |x|
-    // ---------------------------------------------------------------------
-    let sign_mask = _mm512_set1_pd(-0.0); // sign bit mask
-    let sign_bits = _mm512_and_pd(x, sign_mask);
-    let abs_x = _mm512_abs_pd(x);
+        // ---------------------------------------------------------------------
+        // Extract sign and compute |x|
+        //
+        // Note: _mm512_and_pd requires avx512dq, so we use integer AND instead.
+        // ---------------------------------------------------------------------
+        let sign_mask_i = _mm512_set1_epi64(0x8000_0000_0000_0000_u64 as i64);
+        let x_i = _mm512_castpd_si512(x);
+        let sign_bits_i = _mm512_and_epi64(x_i, sign_mask_i);
+        let sign_bits = _mm512_castsi512_pd(sign_bits_i);
+        let abs_x = _mm512_abs_pd(x);
 
-    // ---------------------------------------------------------------------
-    // Compute range masks (from smallest to largest)
-    // AVX-512 uses __mmask8 for f64 comparisons
-    // ---------------------------------------------------------------------
-    let is_lt_thr0 = _mm512_cmp_pd_mask(abs_x, thr0, _CMP_LT_OQ); // |x| < 7/16
-    let is_lt_thr1 = _mm512_cmp_pd_mask(abs_x, thr1, _CMP_LT_OQ); // |x| < 11/16
-    let is_lt_thr2 = _mm512_cmp_pd_mask(abs_x, thr2, _CMP_LT_OQ); // |x| < 19/16
-    let is_lt_thr3 = _mm512_cmp_pd_mask(abs_x, thr3, _CMP_LT_OQ); // |x| < 39/16
+        // ---------------------------------------------------------------------
+        // Compute range masks (from smallest to largest)
+        // AVX-512 uses __mmask8 for f64 comparisons
+        // ---------------------------------------------------------------------
+        let is_lt_thr0 = _mm512_cmp_pd_mask(abs_x, thr0, _CMP_LT_OQ); // |x| < 7/16
+        let is_lt_thr1 = _mm512_cmp_pd_mask(abs_x, thr1, _CMP_LT_OQ); // |x| < 11/16
+        let is_lt_thr2 = _mm512_cmp_pd_mask(abs_x, thr2, _CMP_LT_OQ); // |x| < 19/16
+        let is_lt_thr3 = _mm512_cmp_pd_mask(abs_x, thr3, _CMP_LT_OQ); // |x| < 39/16
 
-    // ---------------------------------------------------------------------
-    // Compute all 4 reduced arguments unconditionally
-    //
-    //  id=-1 (|x| < 7/16):  t = abs_x  (no reduction)
-    //  id=0  (7/16..11/16): t = (2·|x| − 1) / (2 + |x|)
-    //  id=1  (11/16..19/16):t = (|x| − 1) / (|x| + 1)
-    //  id=2  (19/16..39/16):t = (2·|x| − 3) / (2 + 3·|x|)
-    //  id=3  (|x| ≥ 39/16): t = −1 / |x|   (gives π/2 − atan(1/|x|))
-    // ---------------------------------------------------------------------
+        // ---------------------------------------------------------------------
+        // Compute all 4 reduced arguments unconditionally
+        //
+        //  id=-1 (|x| < 7/16):  t = abs_x  (no reduction)
+        //  id=0  (7/16..11/16): t = (2·|x| − 1) / (2 + |x|)
+        //  id=1  (11/16..19/16):t = (|x| − 1) / (|x| + 1)
+        //  id=2  (19/16..39/16):t = (2·|x| − 3) / (2 + 3·|x|)
+        //  id=3  (|x| ≥ 39/16): t = −1 / |x|   (gives π/2 − atan(1/|x|))
+        // ---------------------------------------------------------------------
 
-    // id=0: (2·|x| − 1) / (2 + |x|)
-    let t0 = _mm512_div_pd(
-        _mm512_sub_pd(_mm512_mul_pd(two, abs_x), one),
-        _mm512_add_pd(two, abs_x),
-    );
+        // id=0: (2·|x| − 1) / (2 + |x|)
+        let t0 = _mm512_div_pd(
+            _mm512_sub_pd(_mm512_mul_pd(two, abs_x), one),
+            _mm512_add_pd(two, abs_x),
+        );
 
-    // id=1: (|x| − 1) / (|x| + 1)
-    let t1 = _mm512_div_pd(_mm512_sub_pd(abs_x, one), _mm512_add_pd(abs_x, one));
+        // id=1: (|x| − 1) / (|x| + 1)
+        let t1 = _mm512_div_pd(_mm512_sub_pd(abs_x, one), _mm512_add_pd(abs_x, one));
 
-    // id=2: (2·|x| − 3) / (2 + 3·|x|)
-    let t2 = _mm512_div_pd(
-        _mm512_sub_pd(_mm512_mul_pd(two, abs_x), three),
-        _mm512_add_pd(two, _mm512_mul_pd(three, abs_x)),
-    );
+        // id=2: (2·|x| − 3) / (2 + 3·|x|)
+        let t2 = _mm512_div_pd(
+            _mm512_sub_pd(_mm512_mul_pd(two, abs_x), three),
+            _mm512_add_pd(two, _mm512_mul_pd(three, abs_x)),
+        );
 
-    // id=3: −1 / |x|  (atan(|x|) = π/2 + atan(−1/|x|))
-    let neg_one = _mm512_sub_pd(_mm512_setzero_pd(), one);
-    let t3 = _mm512_div_pd(neg_one, abs_x);
+        // id=3: −1 / |x|  (atan(|x|) = π/2 + atan(−1/|x|))
+        let neg_one = _mm512_sub_pd(_mm512_setzero_pd(), one);
+        let t3 = _mm512_div_pd(neg_one, abs_x);
 
-    // ---------------------------------------------------------------------
-    // Select the reduced argument by cascaded blending.
-    //
-    // Priority (highest first): id=3, id=2, id=1, id=0, id=-1
-    // AVX-512 mask_blend: mask selects from second operand when bit is 1
-    // ---------------------------------------------------------------------
-    // Start from id=3, blend down toward id=-1
-    let t = {
-        let t = _mm512_mask_blend_pd(is_lt_thr3, t3, t2); // id=3 or id=2
-        let t = _mm512_mask_blend_pd(is_lt_thr2, t, t1); // …or id=1
-        let t = _mm512_mask_blend_pd(is_lt_thr1, t, t0); // …or id=0
-        _mm512_mask_blend_pd(is_lt_thr0, t, abs_x) // …or no reduction
-    };
+        // ---------------------------------------------------------------------
+        // Select the reduced argument by cascaded blending.
+        //
+        // Priority (highest first): id=3, id=2, id=1, id=0, id=-1
+        // AVX-512 mask_blend: mask selects from second operand when bit is 1
+        // ---------------------------------------------------------------------
+        // Start from id=3, blend down toward id=-1
+        let t = {
+            let t = _mm512_mask_blend_pd(is_lt_thr3, t3, t2); // id=3 or id=2
+            let t = _mm512_mask_blend_pd(is_lt_thr2, t, t1); // …or id=1
+            let t = _mm512_mask_blend_pd(is_lt_thr1, t, t0); // …or id=0
+            _mm512_mask_blend_pd(is_lt_thr0, t, abs_x) // …or no reduction
+        };
 
-    // ---------------------------------------------------------------------
-    // Select the matching hi/lo offsets by cascaded blending
-    //
-    // id=-1 → hi=0, lo=0
-    // ---------------------------------------------------------------------
-    let zero_pd = _mm512_setzero_pd();
-    let hi = {
-        let hi = _mm512_mask_blend_pd(is_lt_thr3, hi3, hi2);
-        let hi = _mm512_mask_blend_pd(is_lt_thr2, hi, hi1);
-        let hi = _mm512_mask_blend_pd(is_lt_thr1, hi, hi0);
-        _mm512_mask_blend_pd(is_lt_thr0, hi, zero_pd)
-    };
-    let lo = {
-        let lo = _mm512_mask_blend_pd(is_lt_thr3, lo3, lo2);
-        let lo = _mm512_mask_blend_pd(is_lt_thr2, lo, lo1);
-        let lo = _mm512_mask_blend_pd(is_lt_thr1, lo, lo0);
-        _mm512_mask_blend_pd(is_lt_thr0, lo, zero_pd)
-    };
+        // ---------------------------------------------------------------------
+        // Select the matching hi/lo offsets by cascaded blending
+        //
+        // id=-1 → hi=0, lo=0
+        // ---------------------------------------------------------------------
+        let zero_pd = _mm512_setzero_pd();
+        let hi = {
+            let hi = _mm512_mask_blend_pd(is_lt_thr3, hi3, hi2);
+            let hi = _mm512_mask_blend_pd(is_lt_thr2, hi, hi1);
+            let hi = _mm512_mask_blend_pd(is_lt_thr1, hi, hi0);
+            _mm512_mask_blend_pd(is_lt_thr0, hi, zero_pd)
+        };
+        let lo = {
+            let lo = _mm512_mask_blend_pd(is_lt_thr3, lo3, lo2);
+            let lo = _mm512_mask_blend_pd(is_lt_thr2, lo, lo1);
+            let lo = _mm512_mask_blend_pd(is_lt_thr1, lo, lo0);
+            _mm512_mask_blend_pd(is_lt_thr0, lo, zero_pd)
+        };
 
-    // ---------------------------------------------------------------------
-    // Polynomial evaluation (musl split odd/even Horner scheme)
-    //
-    // With z = t² and w = z²:
-    //   s1 = z · (aT[0] + w·(aT[2] + w·(aT[4] + w·(aT[6] + w·(aT[8] + w·aT[10])))))
-    //   s2 = w · (aT[1] + w·(aT[3] + w·(aT[5] + w·(aT[7] + w·aT[9]))))
-    //
-    // Splitting into odd/even improves instruction-level parallelism because
-    // s1 and s2 can be computed simultaneously.
-    // ---------------------------------------------------------------------
-    let z = _mm512_mul_pd(t, t); // t²
-    let w = _mm512_mul_pd(z, z); // t⁴
+        // ---------------------------------------------------------------------
+        // Polynomial evaluation (musl split odd/even Horner scheme)
+        //
+        // With z = t² and w = z²:
+        //   s1 = z · (aT[0] + w·(aT[2] + w·(aT[4] + w·(aT[6] + w·(aT[8] + w·aT[10])))))
+        //   s2 = w · (aT[1] + w·(aT[3] + w·(aT[5] + w·(aT[7] + w·aT[9]))))
+        //
+        // Splitting into odd/even improves instruction-level parallelism because
+        // s1 and s2 can be computed simultaneously.
+        // ---------------------------------------------------------------------
+        let z = _mm512_mul_pd(t, t); // t²
+        let w = _mm512_mul_pd(z, z); // t⁴
 
-    // s1: odd-indexed coefficients (aT[0], aT[2], aT[4], aT[6], aT[8], aT[10])
-    let s1 = _mm512_mul_pd(
-        z,
-        _mm512_fmadd_pd(
+        // s1: odd-indexed coefficients (aT[0], aT[2], aT[4], aT[6], aT[8], aT[10])
+        let s1 = _mm512_mul_pd(
+            z,
+            _mm512_fmadd_pd(
+                w,
+                _mm512_fmadd_pd(
+                    w,
+                    _mm512_fmadd_pd(
+                        w,
+                        _mm512_fmadd_pd(w, _mm512_fmadd_pd(w, at10, at8), at6),
+                        at4,
+                    ),
+                    at2,
+                ),
+                at0,
+            ),
+        );
+
+        // s2: even-indexed coefficients (aT[1], aT[3], aT[5], aT[7], aT[9])
+        let s2 = _mm512_mul_pd(
             w,
             _mm512_fmadd_pd(
                 w,
                 _mm512_fmadd_pd(
                     w,
-                    _mm512_fmadd_pd(w, _mm512_fmadd_pd(w, at10, at8), at6),
-                    at4,
+                    _mm512_fmadd_pd(w, _mm512_fmadd_pd(w, at9, at7), at5),
+                    at3,
                 ),
-                at2,
+                at1,
             ),
-            at0,
-        ),
-    );
+        );
 
-    // s2: even-indexed coefficients (aT[1], aT[3], aT[5], aT[7], aT[9])
-    let s2 = _mm512_mul_pd(
-        w,
-        _mm512_fmadd_pd(
-            w,
-            _mm512_fmadd_pd(
-                w,
-                _mm512_fmadd_pd(w, _mm512_fmadd_pd(w, at9, at7), at5),
-                at3,
-            ),
-            at1,
-        ),
-    );
+        // ---------------------------------------------------------------------
+        // Combine: result = hi + lo + t − t·(s1 + s2)
+        //
+        // Expanding the musl formula: atanhi + atanlo + t*(1 − (s1+s2))
+        // Written as two FMAs to keep accuracy:
+        //   correction = t * (s1 + s2)
+        //   result     = hi + lo + t − correction
+        // ---------------------------------------------------------------------
+        let sum_s = _mm512_add_pd(s1, s2);
+        let correction = _mm512_mul_pd(t, sum_s); // t·(s1+s2)
 
-    // ---------------------------------------------------------------------
-    // Combine: result = hi + lo + t − t·(s1 + s2)
-    //
-    // Expanding the musl formula: atanhi + atanlo + t*(1 − (s1+s2))
-    // Written as two FMAs to keep accuracy:
-    //   correction = t * (s1 + s2)
-    //   result     = hi + lo + t − correction
-    // ---------------------------------------------------------------------
-    let sum_s = _mm512_add_pd(s1, s2);
-    let correction = _mm512_mul_pd(t, sum_s); // t·(s1+s2)
+        // hi + lo + t − correction  (order matters for cancellation)
+        let result_abs = _mm512_add_pd(_mm512_add_pd(hi, lo), _mm512_sub_pd(t, correction));
 
-    // hi + lo + t − correction  (order matters for cancellation)
-    let result_abs = _mm512_add_pd(_mm512_add_pd(hi, lo), _mm512_sub_pd(t, correction));
-
-    // ---------------------------------------------------------------------
-    // Restore sign: atan(−x) = −atan(x)
-    //
-    // XOR with original sign bits correctly propagates −0.0 → −0.0.
-    // ---------------------------------------------------------------------
-    _mm512_xor_pd(result_abs, sign_bits)
+        // ---------------------------------------------------------------------
+        // Restore sign: atan(−x) = −atan(x)
+        //
+        // XOR with original sign bits correctly propagates −0.0 → −0.0.
+        //
+        // Note: _mm512_xor_pd requires avx512dq, so we use integer XOR instead.
+        // ---------------------------------------------------------------------
+        let result_abs_i = _mm512_castpd_si512(result_abs);
+        let result_i = _mm512_xor_epi64(result_abs_i, sign_bits_i);
+        _mm512_castsi512_pd(result_i)
+    }
 }
 
 // ===========================================================================
