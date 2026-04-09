@@ -63,6 +63,16 @@ impl VecMath<f32> for Vec<f32> {
     fn atan2(&self, other: &Self) -> Vec<f32> {
         binary_op::<f32, F32x8>(self, other, f32x8::LANE_COUNT, |y, x| y.atan2(&x))
     }
+
+    /// Cube root of every element, processed 8 lanes at a time via AVX2.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> Vec<f32> {
+        unary_op::<f32, F32x8>(self, f32x8::LANE_COUNT, |v| v.cbrt())
+    }
 }
 
 impl VecMath<f64> for Vec<f64> {
@@ -118,6 +128,16 @@ impl VecMath<f64> for Vec<f64> {
     fn atan2(&self, other: &Self) -> Vec<f64> {
         binary_op::<f64, F64x4>(self, other, f64x4::LANE_COUNT, |y, x| y.atan2(&x))
     }
+
+    /// Cube root of every element, processed 4 lanes at a time via AVX2.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> Vec<f64> {
+        unary_op::<f64, F64x4>(self, f64x4::LANE_COUNT, |v| v.cbrt())
+    }
 }
 
 #[cfg(test)]
@@ -165,7 +185,7 @@ mod tests {
 
     #[test]
     fn abs_f32_empty() {
-        assert_eq!(Vec::<f32>::new().abs(), vec![]);
+        assert_eq!(Vec::<f32>::new().abs(), Vec::<f32>::new());
     }
 
     // ---- acos f32 ------------------------------------------------------------
@@ -244,7 +264,7 @@ mod tests {
 
     #[test]
     fn abs_f64_empty() {
-        assert_eq!(Vec::<f64>::new().abs(), vec![]);
+        assert_eq!(Vec::<f64>::new().abs(), Vec::<f64>::new());
     }
 
     // ---- acos f64 ------------------------------------------------------------

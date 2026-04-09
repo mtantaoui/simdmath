@@ -3,6 +3,7 @@ pub(crate) mod acos;
 pub(crate) mod asin;
 pub(crate) mod atan;
 pub(crate) mod atan2;
+pub(crate) mod cbrt;
 pub(crate) mod f32x16;
 pub(crate) mod f64x8;
 pub(crate) mod math;

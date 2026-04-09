@@ -50,6 +50,16 @@ impl VecMath<f32> for Vec<f32> {
     fn atan2(&self, other: &Self) -> Vec<f32> {
         binary_op::<f32, F32x16>(self, other, f32x16::LANE_COUNT, |y, x| y.atan2(&x))
     }
+
+    /// Cube root of every element, processed 16 lanes at a time via AVX-512.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> Vec<f32> {
+        unary_op::<f32, F32x16>(self, f32x16::LANE_COUNT, |v| v.cbrt())
+    }
 }
 
 impl VecMath<f64> for Vec<f64> {
@@ -96,6 +106,16 @@ impl VecMath<f64> for Vec<f64> {
     #[inline]
     fn atan2(&self, other: &Self) -> Vec<f64> {
         binary_op::<f64, F64x8>(self, other, f64x8::LANE_COUNT, |y, x| y.atan2(&x))
+    }
+
+    /// Cube root of every element, processed 8 lanes at a time via AVX-512.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> Vec<f64> {
+        unary_op::<f64, F64x8>(self, f64x8::LANE_COUNT, |v| v.cbrt())
     }
 }
 

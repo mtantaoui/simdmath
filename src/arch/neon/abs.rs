@@ -2,10 +2,29 @@
 //!
 //! NEON provides the `vabs` instruction for floating-point absolute value,
 //! which is directly exposed via `vabsq_f32` and `vabsq_f64`.
+//!
+//! # Precision
+//!
+//! This operation is **exact (0 ULP error)**. It performs a bitwise AND to
+//! clear the sign bit without any rounding or arithmetic.
+//!
+//! # Special Values
+//!
+//! | Input  | Output |
+//! |--------|--------|
+//! | `+0.0` | `+0.0` |
+//! | `-0.0` | `+0.0` |
+//! | `+∞`   | `+∞`   |
+//! | `-∞`   | `+∞`   |
+//! | `NaN`  | `NaN` (sign bit cleared, payload preserved) |
 
 use std::arch::aarch64::*;
 
 /// Computes the absolute value of each `f32` lane in a NEON `float32x4_t` register.
+///
+/// # Precision
+///
+/// **Exact (0 ULP error)** — purely bitwise operation with no rounding.
 ///
 /// # Safety
 /// `f` must be a valid `float32x4_t` value.
@@ -15,6 +34,10 @@ pub(crate) unsafe fn vabsq_f32_wrapper(f: float32x4_t) -> float32x4_t {
 }
 
 /// Computes the absolute value of each `f64` lane in a NEON `float64x2_t` register.
+///
+/// # Precision
+///
+/// **Exact (0 ULP error)** — purely bitwise operation with no rounding.
 ///
 /// # Safety
 /// `f` must be a valid `float64x2_t` value.

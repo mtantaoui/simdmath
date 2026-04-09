@@ -9,6 +9,7 @@ use crate::arch::neon::acos::{vacos_f32, vacos_f64};
 use crate::arch::neon::asin::{vasin_f32, vasin_f64};
 use crate::arch::neon::atan::{vatan_f32, vatan_f64};
 use crate::arch::neon::atan2::{vatan2_f32, vatan2_f64};
+use crate::arch::neon::cbrt::{vcbrt_f32, vcbrt_f64};
 use crate::arch::neon::f32x4::F32x4;
 use crate::arch::neon::f64x2::F64x2;
 use crate::math::VecMath;
@@ -76,6 +77,19 @@ impl VecMath<f32> for F32x4 {
             elements: unsafe { vatan2_f32(self.elements, other.elements) },
         }
     }
+
+    /// Cube root of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> F32x4 {
+        F32x4 {
+            size: self.size,
+            elements: unsafe { vcbrt_f32(self.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x2 {
@@ -139,6 +153,19 @@ impl VecMath<f64> for F64x2 {
         F64x2 {
             size: self.size,
             elements: unsafe { vatan2_f64(self.elements, other.elements) },
+        }
+    }
+
+    /// Cube root of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> F64x2 {
+        F64x2 {
+            size: self.size,
+            elements: unsafe { vcbrt_f64(self.elements) },
         }
     }
 }

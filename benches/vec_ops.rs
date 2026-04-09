@@ -18,6 +18,7 @@ use ops::add::{bench_add_f32, bench_add_f64, bench_add_scalar_f32, bench_add_sca
 use ops::asin::{bench_asin_f32, bench_asin_f64};
 use ops::atan::{bench_atan_f32, bench_atan_f64};
 use ops::atan2::{bench_atan2_f32, bench_atan2_f64};
+use ops::cbrt::{bench_cbrt_f32, bench_cbrt_f64};
 use ops::div::{bench_div_f32, bench_div_f64};
 use ops::mul::{bench_mul_f32, bench_mul_f64, bench_mul_scalar_f32, bench_mul_scalar_f64};
 use ops::reduce::{
@@ -38,6 +39,8 @@ criterion_group!(
     bench_atan_f64,
     bench_atan2_f32,
     bench_atan2_f64,
+    bench_cbrt_f32,
+    bench_cbrt_f64,
     // Addition
     bench_add_f32,
     bench_add_f64,

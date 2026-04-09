@@ -10,6 +10,7 @@ use crate::arch::avx512::acos::{_mm512_acos_pd, _mm512_acos_ps};
 use crate::arch::avx512::asin::{_mm512_asin_pd, _mm512_asin_ps};
 use crate::arch::avx512::atan::{_mm512_atan_pd, _mm512_atan_ps};
 use crate::arch::avx512::atan2::{_mm512_atan2_pd, _mm512_atan2_ps};
+use crate::arch::avx512::cbrt::{_mm512_cbrt_pd, _mm512_cbrt_ps};
 use crate::arch::avx512::f32x16::F32x16;
 use crate::arch::avx512::f64x8::F64x8;
 use crate::math::VecMath;
@@ -79,6 +80,19 @@ impl VecMath<f32> for F32x16 {
             elements: unsafe { _mm512_atan2_ps(self.elements, other.elements) },
         }
     }
+
+    /// Cube root of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> F32x16 {
+        F32x16 {
+            size: self.size,
+            elements: unsafe { _mm512_cbrt_ps(self.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x8 {
@@ -144,6 +158,19 @@ impl VecMath<f64> for F64x8 {
         F64x8 {
             size: self.size,
             elements: unsafe { _mm512_atan2_pd(self.elements, other.elements) },
+        }
+    }
+
+    /// Cube root of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1 ULP** error across the entire domain.
+    #[inline]
+    fn cbrt(&self) -> F64x8 {
+        F64x8 {
+            size: self.size,
+            elements: unsafe { _mm512_cbrt_pd(self.elements) },
         }
     }
 }
