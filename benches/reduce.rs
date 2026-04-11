@@ -1,15 +1,18 @@
 //! Benchmarks for reduction operations (sum, product, min, max).
 
-use criterion::{BenchmarkId, Criterion, black_box};
+#[path = "common.rs"]
+mod common;
+
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use simdmath::ops::vec::VecExt;
 
-use super::common::*;
+use common::*;
 
 // ---------------------------------------------------------------------------
 // Sum
 // ---------------------------------------------------------------------------
 
-pub fn bench_sum_f32(c: &mut Criterion) {
+fn bench_sum_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/sum");
     for &n in SIZES_F32 {
         let (a, _) = make_vecs_f32(n);
@@ -23,7 +26,7 @@ pub fn bench_sum_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_sum_f64(c: &mut Criterion) {
+fn bench_sum_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/sum");
     for &n in SIZES_F64 {
         let (a, _) = make_vecs_f64(n);
@@ -41,7 +44,7 @@ pub fn bench_sum_f64(c: &mut Criterion) {
 // Product
 // ---------------------------------------------------------------------------
 
-pub fn bench_product_f32(c: &mut Criterion) {
+fn bench_product_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/product");
     for &n in SIZES_F32 {
         let (a, _) = make_vecs_f32(n);
@@ -55,7 +58,7 @@ pub fn bench_product_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_product_f64(c: &mut Criterion) {
+fn bench_product_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/product");
     for &n in SIZES_F64 {
         let (a, _) = make_vecs_f64(n);
@@ -73,7 +76,7 @@ pub fn bench_product_f64(c: &mut Criterion) {
 // Min
 // ---------------------------------------------------------------------------
 
-pub fn bench_min_f32(c: &mut Criterion) {
+fn bench_min_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/min");
     for &n in SIZES_F32 {
         let (a, _) = make_vecs_f32(n);
@@ -87,7 +90,7 @@ pub fn bench_min_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_min_f64(c: &mut Criterion) {
+fn bench_min_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/min");
     for &n in SIZES_F64 {
         let (a, _) = make_vecs_f64(n);
@@ -105,7 +108,7 @@ pub fn bench_min_f64(c: &mut Criterion) {
 // Max
 // ---------------------------------------------------------------------------
 
-pub fn bench_max_f32(c: &mut Criterion) {
+fn bench_max_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/max");
     for &n in SIZES_F32 {
         let (a, _) = make_vecs_f32(n);
@@ -119,7 +122,7 @@ pub fn bench_max_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_max_f64(c: &mut Criterion) {
+fn bench_max_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/max");
     for &n in SIZES_F64 {
         let (a, _) = make_vecs_f64(n);
@@ -132,3 +135,16 @@ pub fn bench_max_f64(c: &mut Criterion) {
     }
     g.finish();
 }
+
+criterion_group!(
+    benches,
+    bench_sum_f32,
+    bench_sum_f64,
+    bench_product_f32,
+    bench_product_f64,
+    bench_min_f32,
+    bench_min_f64,
+    bench_max_f32,
+    bench_max_f64
+);
+criterion_main!(benches);

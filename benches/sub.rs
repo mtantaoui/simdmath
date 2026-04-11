@@ -1,11 +1,14 @@
 //! Benchmarks for element-wise subtraction.
 
-use criterion::{BenchmarkId, Criterion, black_box};
+#[path = "common.rs"]
+mod common;
+
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use simdmath::ops::vec::VecExt;
 
-use super::common::*;
+use common::*;
 
-pub fn bench_sub_f32(c: &mut Criterion) {
+fn bench_sub_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/sub");
     for &n in SIZES_F32 {
         let (a, b) = make_vecs_f32(n);
@@ -19,7 +22,7 @@ pub fn bench_sub_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_sub_f64(c: &mut Criterion) {
+fn bench_sub_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/sub");
     for &n in SIZES_F64 {
         let (a, b) = make_vecs_f64(n);
@@ -32,3 +35,6 @@ pub fn bench_sub_f64(c: &mut Criterion) {
     }
     g.finish();
 }
+
+criterion_group!(benches, bench_sub_f32, bench_sub_f64);
+criterion_main!(benches);

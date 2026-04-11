@@ -73,6 +73,76 @@ impl VecMath<f32> for Vec<f32> {
     fn cbrt(&self) -> Vec<f32> {
         unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.cbrt())
     }
+
+    /// Cosine of every element (radians), processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn cos(&self) -> Vec<f32> {
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.cos())
+    }
+
+    /// Exponential (`e^x`) of every element, processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn exp(&self) -> Vec<f32> {
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.exp())
+    }
+
+    /// Natural logarithm of every element, processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn ln(&self) -> Vec<f32> {
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.ln())
+    }
+
+    /// Sine of every element (radians), processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn sin(&self) -> Vec<f32> {
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.sin())
+    }
+
+    /// Tangent of every element (radians), processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn tan(&self) -> Vec<f32> {
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.tan())
+    }
+
+    /// `self^exp` for every element, processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn pow(&self, exp: &Self) -> Vec<f32> {
+        binary_op::<f32, F32x4>(self, exp, f32x4::LANE_COUNT, |b, e| b.pow(&e))
+    }
+
+    /// Square root of every element, processed 4 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    #[inline]
+    fn sqrt(&self) -> Vec<f32> {
+        unary_op::<f32, F32x4>(self, f32x4::LANE_COUNT, |v| v.sqrt())
+    }
 }
 
 impl VecMath<f64> for Vec<f64> {
@@ -137,6 +207,76 @@ impl VecMath<f64> for Vec<f64> {
     #[inline]
     fn cbrt(&self) -> Vec<f64> {
         unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.cbrt())
+    }
+
+    /// Cosine of every element (radians), processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn cos(&self) -> Vec<f64> {
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.cos())
+    }
+
+    /// Exponential (`e^x`) of every element, processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn exp(&self) -> Vec<f64> {
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.exp())
+    }
+
+    /// Natural logarithm of every element, processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn ln(&self) -> Vec<f64> {
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.ln())
+    }
+
+    /// Sine of every element (radians), processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn sin(&self) -> Vec<f64> {
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.sin())
+    }
+
+    /// Tangent of every element (radians), processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn tan(&self) -> Vec<f64> {
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.tan())
+    }
+
+    /// `self^exp` for every element, processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn pow(&self, exp: &Self) -> Vec<f64> {
+        binary_op::<f64, F64x2>(self, exp, f64x2::LANE_COUNT, |b, e| b.pow(&e))
+    }
+
+    /// Square root of every element, processed 2 lanes at a time via NEON.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    #[inline]
+    fn sqrt(&self) -> Vec<f64> {
+        unary_op::<f64, F64x2>(self, f64x2::LANE_COUNT, |v| v.sqrt())
     }
 }
 

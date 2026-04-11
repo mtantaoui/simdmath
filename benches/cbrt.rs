@@ -1,9 +1,12 @@
 //! Benchmarks for cube root (cbrt).
 
-use criterion::{BenchmarkId, Criterion, black_box};
+#[path = "common.rs"]
+mod common;
+
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use simdmath::math::VecMath;
 
-use super::common::*;
+use common::*;
 
 fn scalar_cbrt_f32(a: &[f32]) -> Vec<f32> {
     a.iter().map(|x| x.cbrt()).collect()
@@ -27,7 +30,7 @@ fn make_cbrt_input_f64(n: usize) -> Vec<f64> {
         .collect()
 }
 
-pub fn bench_cbrt_f32(c: &mut Criterion) {
+fn bench_cbrt_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/cbrt");
     for &n in SIZES_F32 {
         let a = make_cbrt_input_f32(n);
@@ -41,7 +44,7 @@ pub fn bench_cbrt_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_cbrt_f64(c: &mut Criterion) {
+fn bench_cbrt_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/cbrt");
     for &n in SIZES_F64 {
         let a = make_cbrt_input_f64(n);
@@ -54,3 +57,6 @@ pub fn bench_cbrt_f64(c: &mut Criterion) {
     }
     g.finish();
 }
+
+criterion_group!(benches, bench_cbrt_f32, bench_cbrt_f64);
+criterion_main!(benches);

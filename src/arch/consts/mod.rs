@@ -9,3 +9,8 @@ pub(crate) mod asin;
 pub(crate) mod atan;
 pub(crate) mod atan2;
 pub(crate) mod cbrt;
+pub(crate) mod cos;
+pub(crate) mod exp;
+pub(crate) mod ln;
+pub(crate) mod sin;
+pub(crate) mod tan;

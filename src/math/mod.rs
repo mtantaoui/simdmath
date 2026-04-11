@@ -149,6 +149,198 @@ pub trait VecMath<T> {
     /// // r ≈ [1.0, 2.0, 3.0, -2.0]
     /// ```
     fn cbrt(&self) -> Self;
+
+    /// Returns the cosine (in radians) of every element.
+    ///
+    /// Computed via Cody-Waite argument reduction to `[-π/4, π/4]` followed
+    /// by minimax polynomial evaluation of cos/sin kernels (musl libc port).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    ///
+    /// # Special values
+    ///
+    /// - `cos(±0)` = `1.0`
+    /// - `cos(±∞)` = `NaN`
+    /// - `cos(NaN)` = `NaN`
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![0.0f32, std::f32::consts::PI, std::f32::consts::FRAC_PI_2];
+    /// let r = a.cos();
+    /// // r ≈ [1.0, -1.0, 0.0]
+    /// ```
+    fn cos(&self) -> Self;
+
+    /// Returns the exponential function `e^x` of every element.
+    ///
+    /// Computed via argument reduction by `ln(2)` followed by a Padé-like
+    /// degree-5 minimax polynomial (fdlibm port).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    ///
+    /// # Special values
+    ///
+    /// - `exp(0)` = `1.0`
+    /// - `exp(+∞)` = `+∞`
+    /// - `exp(-∞)` = `0.0`
+    /// - `exp(NaN)` = `NaN`
+    /// - `exp(x > ~709.8)` = `+∞` (overflow)
+    /// - `exp(x < ~-745)` = `0.0` (underflow)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![0.0f32, 1.0, -1.0];
+    /// let r = a.exp();
+    /// // r ≈ [1.0, 2.718, 0.368]
+    /// ```
+    fn exp(&self) -> Self;
+
+    /// Returns the natural logarithm of every element.
+    ///
+    /// Computed via argument decomposition `x = 2^k * m` and a degree-7
+    /// minimax polynomial in `s = f/(2+f)` (fdlibm port).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    ///
+    /// # Special values
+    ///
+    /// - `ln(1)` = `0.0`
+    /// - `ln(0)` = `-∞`
+    /// - `ln(+∞)` = `+∞`
+    /// - `ln(x < 0)` = `NaN`
+    /// - `ln(NaN)` = `NaN`
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![1.0f32, std::f32::consts::E, 10.0];
+    /// let r = a.ln();
+    /// // r ≈ [0.0, 1.0, 2.303]
+    /// ```
+    fn ln(&self) -> Self;
+
+    /// Returns the sine (in radians) of every element.
+    ///
+    /// Computed via Cody-Waite argument reduction to `[-π/4, π/4]` followed
+    /// by minimax polynomial evaluation of sin/cos kernels (musl libc port).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    ///
+    /// *Note*: The AVX2 backend achieves ≤ 1.5 ULP; AVX-512 and NEON achieve
+    /// ≤ 2 ULP. The trait-level bound is the worst-case across all backends.
+    ///
+    /// # Special values
+    ///
+    /// - `sin(±0)` = `±0`
+    /// - `sin(±∞)` = `NaN`
+    /// - `sin(NaN)` = `NaN`
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![0.0f32, std::f32::consts::FRAC_PI_2, std::f32::consts::PI];
+    /// let r = a.sin();
+    /// // r ≈ [0.0, 1.0, 0.0]
+    /// ```
+    fn sin(&self) -> Self;
+
+    /// Returns the tangent (in radians) of every element.
+    ///
+    /// Computed via Cody-Waite argument reduction to `[-π/4, π/4]` followed
+    /// by minimax polynomial evaluation of the tangent kernel. For odd
+    /// quadrants, uses the cotangent identity `-1/tan(y)` (musl libc port).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    ///
+    /// # Special values
+    ///
+    /// - `tan(±0)` = `±0`
+    /// - `tan(±∞)` = `NaN`
+    /// - `tan(NaN)` = `NaN`
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![0.0f32, std::f32::consts::FRAC_PI_4];
+    /// let r = a.tan();
+    /// // r ≈ [0.0, 1.0]
+    /// ```
+    fn tan(&self) -> Self;
+
+    /// Returns `self` raised to the power `exp` for every element: `self[i].powf(exp[i])`.
+    ///
+    /// Computed via compensated arithmetic: a high/low split of `ln(|x|)`,
+    /// Dekker multiplication by `y`, and a compensated `exp` that folds in
+    /// the low-order correction term. This achieves ≤ 2 ULP for both f32
+    /// and f64 (the naive `exp(y·ln(x))` loses too much precision for f64).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    ///
+    /// # Special values (IEEE 754 / C99 §7.12.7.4)
+    ///
+    /// - `pow(x, ±0)` = `1` for any `x` (including `NaN`)
+    /// - `pow(1, y)` = `1` for any `y` (including `NaN`)
+    /// - `pow(x, y)` = `NaN` if `x < 0` and `y` is not an integer
+    /// - `pow(±0, y)` = `±∞` / `±0` depending on sign and odd-integer status
+    /// - `pow(±∞, y)` follows standard infinity rules
+    /// - `pow(x, ±∞)` = `0` or `+∞` depending on `|x|` vs 1
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let bases = vec![2.0f32, 3.0, 10.0, 0.5];
+    /// let exps  = vec![3.0f32, 2.0, 0.5, -1.0];
+    /// let r = bases.pow(&exps);
+    /// // r ≈ [8.0, 9.0, 3.162, 2.0]
+    /// ```
+    fn pow(&self, exp: &Self) -> Self;
+
+    /// Returns the square root of every element.
+    ///
+    /// Uses the hardware `sqrt` instruction, which is one of the five
+    /// IEEE 754 correctly-rounded basic operations.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    ///
+    /// # Special values
+    ///
+    /// - `sqrt(+0)` = `+0`
+    /// - `sqrt(-0)` = `-0`
+    /// - `sqrt(+∞)` = `+∞`
+    /// - `sqrt(x < 0)` = `NaN`
+    /// - `sqrt(NaN)` = `NaN`
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use simdmath::math::VecMath;
+    /// let a = vec![1.0f32, 4.0, 9.0, 16.0];
+    /// let r = a.sqrt();
+    /// // r ≈ [1.0, 2.0, 3.0, 4.0]
+    /// ```
+    fn sqrt(&self) -> Self;
 }
 
 // ---------------------------------------------------------------------------

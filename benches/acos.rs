@@ -1,9 +1,12 @@
 //! Benchmarks for arc cosine (acos).
 
-use criterion::{BenchmarkId, Criterion, black_box};
+#[path = "common.rs"]
+mod common;
+
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use simdmath::math::VecMath;
 
-use super::common::*;
+use common::*;
 
 fn scalar_acos_f32(a: &[f32]) -> Vec<f32> {
     a.iter().map(|x| x.acos()).collect()
@@ -23,7 +26,7 @@ fn make_acos_input_f64(n: usize) -> Vec<f64> {
     (0..n).map(|i| (i as f64 / n as f64) * 2.0 - 1.0).collect()
 }
 
-pub fn bench_acos_f32(c: &mut Criterion) {
+fn bench_acos_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/acos");
     for &n in SIZES_F32 {
         let a = make_acos_input_f32(n);
@@ -37,7 +40,7 @@ pub fn bench_acos_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_acos_f64(c: &mut Criterion) {
+fn bench_acos_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/acos");
     for &n in SIZES_F64 {
         let a = make_acos_input_f64(n);
@@ -50,3 +53,6 @@ pub fn bench_acos_f64(c: &mut Criterion) {
     }
     g.finish();
 }
+
+criterion_group!(benches, bench_acos_f32, bench_acos_f64);
+criterion_main!(benches);

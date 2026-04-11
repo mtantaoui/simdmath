@@ -1,9 +1,12 @@
 //! Benchmarks for two-argument arc tangent (atan2).
 
-use criterion::{BenchmarkId, Criterion, black_box};
+#[path = "common.rs"]
+mod common;
+
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use simdmath::math::VecMath;
 
-use super::common::*;
+use common::*;
 
 fn scalar_atan2_f32(y: &[f32], x: &[f32]) -> Vec<f32> {
     y.iter().zip(x).map(|(y, x)| y.atan2(*x)).collect()
@@ -51,7 +54,7 @@ fn make_atan2_inputs_f64(n: usize) -> (Vec<f64>, Vec<f64>) {
     (y, x)
 }
 
-pub fn bench_atan2_f32(c: &mut Criterion) {
+fn bench_atan2_f32(c: &mut Criterion) {
     let mut g = c.benchmark_group("f32/atan2");
     for &n in SIZES_F32 {
         let (y, x) = make_atan2_inputs_f32(n);
@@ -65,7 +68,7 @@ pub fn bench_atan2_f32(c: &mut Criterion) {
     g.finish();
 }
 
-pub fn bench_atan2_f64(c: &mut Criterion) {
+fn bench_atan2_f64(c: &mut Criterion) {
     let mut g = c.benchmark_group("f64/atan2");
     for &n in SIZES_F64 {
         let (y, x) = make_atan2_inputs_f64(n);
@@ -78,3 +81,6 @@ pub fn bench_atan2_f64(c: &mut Criterion) {
     }
     g.finish();
 }
+
+criterion_group!(benches, bench_atan2_f32, bench_atan2_f64);
+criterion_main!(benches);

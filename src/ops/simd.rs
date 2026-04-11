@@ -150,6 +150,7 @@ pub(crate) trait Store<T> {
     ///
     /// # Safety
     /// - `ptr` must be non-null and aligned to the register boundary.
+    #[allow(dead_code)]
     unsafe fn stream_at(&self, ptr: *mut T);
 
     /// Writes all lanes to a pointer that is guaranteed to be register-aligned.
