@@ -1,5 +1,7 @@
 //! Shared utilities for benchmarks.
 
+#![allow(dead_code)]
+
 use std::iter::{Product, Sum};
 use std::ops::{Add, Div, Mul, Rem, Sub};
 

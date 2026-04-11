@@ -4,14 +4,25 @@
 //! approximation) and returns a register of the same type, preserving `size`
 //! so that the generic `unary_op` loop in [`crate::math`] can handle tails.
 
+#[cfg(target_arch = "x86")]
+use std::arch::x86::{_mm256_sqrt_pd, _mm256_sqrt_ps};
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::{_mm256_sqrt_pd, _mm256_sqrt_ps};
+
 use crate::arch::avx2::abs::{_mm256_abs_pd, _mm256_abs_ps};
 use crate::arch::avx2::acos::{_mm256_acos_pd, _mm256_acos_ps};
 use crate::arch::avx2::asin::{_mm256_asin_pd, _mm256_asin_ps};
 use crate::arch::avx2::atan::{_mm256_atan_pd, _mm256_atan_ps};
 use crate::arch::avx2::atan2::{_mm256_atan2_pd, _mm256_atan2_ps};
 use crate::arch::avx2::cbrt::{_mm256_cbrt_pd, _mm256_cbrt_ps};
+use crate::arch::avx2::cos::{_mm256_cos_pd, _mm256_cos_ps};
+use crate::arch::avx2::exp::{_mm256_exp_pd, _mm256_exp_ps};
 use crate::arch::avx2::f32x8::F32x8;
 use crate::arch::avx2::f64x4::F64x4;
+use crate::arch::avx2::ln::{_mm256_ln_pd, _mm256_ln_ps};
+use crate::arch::avx2::pow::{_mm256_pow_pd, _mm256_pow_ps};
+use crate::arch::avx2::sin::{_mm256_sin_pd, _mm256_sin_ps};
+use crate::arch::avx2::tan::{_mm256_tan_pd, _mm256_tan_ps};
 use crate::math::VecMath;
 
 impl VecMath<f32> for F32x8 {
@@ -92,6 +103,97 @@ impl VecMath<f32> for F32x8 {
             elements: unsafe { _mm256_cbrt_ps(self.elements) },
         }
     }
+
+    /// Cosine of every lane (radians).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn cos(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_cos_ps(self.elements) },
+        }
+    }
+
+    /// Exponential (`e^x`) of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn exp(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_exp_ps(self.elements) },
+        }
+    }
+
+    /// Natural logarithm of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn ln(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_ln_ps(self.elements) },
+        }
+    }
+
+    /// Sine of every lane (radians).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1.5 ULP** error across the entire domain.
+    #[inline]
+    fn sin(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_sin_ps(self.elements) },
+        }
+    }
+
+    /// Tangent of every lane (radians).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn tan(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_tan_ps(self.elements) },
+        }
+    }
+
+    /// `self^exp` for every lane via compensated arithmetic.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn pow(&self, exp: &F32x8) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_pow_ps(self.elements, exp.elements) },
+        }
+    }
+
+    /// Square root of every lane via `vsqrtps`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    #[inline]
+    fn sqrt(&self) -> F32x8 {
+        F32x8 {
+            size: self.size,
+            elements: unsafe { _mm256_sqrt_ps(self.elements) },
+        }
+    }
 }
 
 impl VecMath<f64> for F64x4 {
@@ -170,6 +272,97 @@ impl VecMath<f64> for F64x4 {
         F64x4 {
             size: self.size,
             elements: unsafe { _mm256_cbrt_pd(self.elements) },
+        }
+    }
+
+    /// Cosine of every lane (radians).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn cos(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_cos_pd(self.elements) },
+        }
+    }
+
+    /// Exponential (`e^x`) of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn exp(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_exp_pd(self.elements) },
+        }
+    }
+
+    /// Natural logarithm of every lane.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn ln(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_ln_pd(self.elements) },
+        }
+    }
+
+    /// Sine of every lane (radians).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 1.5 ULP** error across the entire domain.
+    #[inline]
+    fn sin(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_sin_pd(self.elements) },
+        }
+    }
+
+    /// Tangent of every lane (radians).
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn tan(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_tan_pd(self.elements) },
+        }
+    }
+
+    /// `self^exp` for every lane via compensated arithmetic.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 2 ULP** error across the entire domain.
+    #[inline]
+    fn pow(&self, exp: &F64x4) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_pow_pd(self.elements, exp.elements) },
+        }
+    }
+
+    /// Square root of every lane via `vsqrtpd`.
+    ///
+    /// # Precision
+    ///
+    /// **≤ 0.5 ULP** — hardware correctly-rounded operation.
+    #[inline]
+    fn sqrt(&self) -> F64x4 {
+        F64x4 {
+            size: self.size,
+            elements: unsafe { _mm256_sqrt_pd(self.elements) },
         }
     }
 }

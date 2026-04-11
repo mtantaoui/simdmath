@@ -470,4 +470,82 @@ mod tests {
             }
         }
     }
+
+    // ---- ULP sweep tests -----------------------------------------------------
+
+    /// Sweep all representable f32 values in [-1, 1] (sampled every 1024th
+    /// bit pattern) and verify ≤ 1 ULP error against the reference `f64→f32`
+    /// promotion.
+    #[test]
+    fn acos_ps_max_ulp_error_is_at_most_1() {
+        let mut max_ulp: u32 = 0;
+        let mut worst_x: f32 = 0.0;
+        let mut bits: u32 = 0u32;
+        loop {
+            let x = f32::from_bits(bits);
+            if x.abs() <= 1.0 {
+                let true_val = (x as f64).acos() as f32;
+                let our_val = unsafe { acos_scalar_32(x) };
+                let d = (our_val.to_bits() as i32 - true_val.to_bits() as i32).unsigned_abs();
+                if d > max_ulp {
+                    max_ulp = d;
+                    worst_x = x;
+                }
+            }
+            bits = bits.wrapping_add(1024);
+            if bits == 0 {
+                break;
+            }
+        }
+        assert!(
+            max_ulp <= 1,
+            "max ULP {max_ulp} at x={worst_x:.8} — expected ≤ 1"
+        );
+    }
+
+    /// Sweep f64 values in [-1, 1] (sampled every ~4 trillionth bit pattern)
+    /// and verify ≤ 1 ULP error against the standard library.
+    #[test]
+    fn acos_pd_max_ulp_error_is_at_most_1() {
+        let mut max_ulp: u64 = 0;
+        let mut worst_x: f64 = 0.0;
+
+        let step: u64 = 1 << 42;
+        let mut bits: u64 = 0u64;
+
+        loop {
+            let x = f64::from_bits(bits);
+            if x.abs() <= 1.0 {
+                let true_val = x.acos();
+                let our_val = unsafe { acos_scalar_64(x) };
+                let d = (our_val.to_bits() as i64 - true_val.to_bits() as i64).unsigned_abs();
+                if d > max_ulp {
+                    max_ulp = d;
+                    worst_x = x;
+                }
+            }
+
+            // Also test negative values.
+            let neg_x = -x;
+            if neg_x.abs() <= 1.0 {
+                let true_val = neg_x.acos();
+                let our_val = unsafe { acos_scalar_64(neg_x) };
+                let d = (our_val.to_bits() as i64 - true_val.to_bits() as i64).unsigned_abs();
+                if d > max_ulp {
+                    max_ulp = d;
+                    worst_x = neg_x;
+                }
+            }
+
+            let (new_bits, overflow) = bits.overflowing_add(step);
+            bits = new_bits;
+            if overflow {
+                break;
+            }
+        }
+        assert!(
+            max_ulp <= 1,
+            "max ULP {max_ulp} at x={worst_x:.16} — expected ≤ 1"
+        );
+    }
 }

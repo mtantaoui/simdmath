@@ -2,6 +2,7 @@
 name = "simdmath"
 version = "0.1.0"
 edition = "2024"
+autobenches = false
 
 [dependencies]
 
@@ -9,5 +10,73 @@ edition = "2024"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bench]]
-name = "vec_ops"
+name = "acos"
+harness = false
+
+[[bench]]
+name = "add"
+harness = false
+
+[[bench]]
+name = "asin"
+harness = false
+
+[[bench]]
+name = "atan"
+harness = false
+
+[[bench]]
+name = "atan2"
+harness = false
+
+[[bench]]
+name = "cbrt"
+harness = false
+
+[[bench]]
+name = "cos"
+harness = false
+
+[[bench]]
+name = "div"
+harness = false
+
+[[bench]]
+name = "exp"
+harness = false
+
+[[bench]]
+name = "ln"
+harness = false
+
+[[bench]]
+name = "mul"
+harness = false
+
+[[bench]]
+name = "pow"
+harness = false
+
+[[bench]]
+name = "reduce"
+harness = false
+
+[[bench]]
+name = "rem"
+harness = false
+
+[[bench]]
+name = "sin"
+harness = false
+
+[[bench]]
+name = "sqrt"
+harness = false
+
+[[bench]]
+name = "sub"
+harness = false
+
+[[bench]]
+name = "tan"
 harness = false
