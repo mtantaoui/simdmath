@@ -40,8 +40,8 @@ use std::arch::aarch64::*;
 
 use crate::arch::consts::sin::{
     C0_32, C1_32, C1_64, C2_32, C2_64, C3_32, C3_64, C4_64, C5_64, C6_64, FRAC_2_PI_32,
-    FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_1T_64, PIO2_2_64, PIO2_2T_64, S1_32,
-    S1_64, S2_32, S2_64, S3_32, S3_64, S4_32, S4_64, S5_64, S6_64, TOINT,
+    FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_2_64, PIO2_2T_64, S1_32, S1_64, S2_32,
+    S2_64, S3_32, S3_64, S4_32, S4_64, S5_64, S6_64, TOINT,
 };
 
 // =============================================================================
@@ -230,7 +230,6 @@ unsafe fn cosdf_kernel(x: float64x2_t) -> float64x2_t {
 pub(crate) unsafe fn vsin_f64(x: float64x2_t) -> float64x2_t {
     let frac_2_pi = vdupq_n_f64(FRAC_2_PI_64);
     let pio2_1 = vdupq_n_f64(PIO2_1_64);
-    let pio2_1t = vdupq_n_f64(PIO2_1T_64);
     let pio2_2 = vdupq_n_f64(PIO2_2_64);
     let pio2_2t = vdupq_n_f64(PIO2_2T_64);
     let toint = vdupq_n_f64(TOINT);
@@ -238,24 +237,20 @@ pub(crate) unsafe fn vsin_f64(x: float64x2_t) -> float64x2_t {
     // -------------------------------------------------------------------------
     // Step 1: Argument reduction with extended precision
     // -------------------------------------------------------------------------
+    // Uses musl's __rem_pio2 2nd-iteration approach unconditionally.
+    // Avoids catastrophic cancellation near multiples of π/2.
 
     let fn_val = vsubq_f64(vfmaq_f64(toint, x, frac_2_pi), toint);
     let n = vcvtq_s64_f64(fn_val);
 
-    // Extended precision Cody-Waite reduction
-    // y = x - fn*(pio2_1 + pio2_1t) with compensation
-    let mut y = vfmsq_f64(x, fn_val, pio2_1);
-    y = vfmsq_f64(y, fn_val, pio2_1t);
+    let r = vfmsq_f64(x, fn_val, pio2_1);
+    let w = vmulq_f64(fn_val, pio2_2);
+    let r2 = vsubq_f64(r, w);
+    let excess = vsubq_f64(vsubq_f64(r, r2), w);
+    let tail = vsubq_f64(vmulq_f64(fn_val, pio2_2t), excess);
+    let y = vsubq_f64(r2, tail);
 
-    // For very large arguments, apply additional correction terms
     let abs_x = vabsq_f64(x);
-    let large_thresh = vdupq_n_f64(1e9); // Beyond this, need more precision
-    let is_large = vcgtq_f64(abs_x, large_thresh);
-
-    // Additional reduction for large values
-    let y_corrected = vfmsq_f64(y, fn_val, pio2_2);
-    let y_corrected = vfmsq_f64(y_corrected, fn_val, pio2_2t);
-    let y = vbslq_f64(is_large, y_corrected, y);
 
     // -------------------------------------------------------------------------
     // Step 2: Compute kernels

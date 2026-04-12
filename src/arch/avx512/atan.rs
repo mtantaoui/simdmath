@@ -9,7 +9,7 @@
 //! ## f32 — Single-range reduction
 //!
 //! For `|x| > 1`: `atan(x) = π/2 - atan(1/x)`, reducing to `[-1, 1]`.
-//! A degree-9 odd polynomial approximates `atan` on that range.
+//! A 9-term odd minimax polynomial approximates `atan` on that range.
 //!
 //! ## f64 — Four-range reduction (musl libc)
 //!
@@ -69,7 +69,7 @@ use crate::arch::consts::atan::{
 /// # Description
 ///
 /// All 16 lanes are processed simultaneously without branches. The algorithm
-/// uses argument reduction for `|x| > 1` and a degree-9 minimax polynomial
+/// uses argument reduction for `|x| > 1` and a 9-term minimax polynomial
 /// for the core approximation.
 ///
 /// # Safety
@@ -115,7 +115,7 @@ pub(crate) unsafe fn _mm512_atan_ps(x: __m512) -> __m512 {
         let sign_mask_i = _mm512_set1_epi32(0x8000_0000_u32 as i32);
         let x_i = _mm512_castps_si512(x);
         let sign_bits_i = _mm512_and_epi32(x_i, sign_mask_i);
-        let sign_bits = _mm512_castsi512_ps(sign_bits_i);
+        let _sign_bits = _mm512_castsi512_ps(sign_bits_i);
         let abs_x = _mm512_abs_ps(x);
 
         // ---------------------------------------------------------------------
@@ -252,7 +252,7 @@ pub(crate) unsafe fn _mm512_atan_pd(x: __m512d) -> __m512d {
         let sign_mask_i = _mm512_set1_epi64(0x8000_0000_0000_0000_u64 as i64);
         let x_i = _mm512_castpd_si512(x);
         let sign_bits_i = _mm512_and_epi64(x_i, sign_mask_i);
-        let sign_bits = _mm512_castsi512_pd(sign_bits_i);
+        let _sign_bits = _mm512_castsi512_pd(sign_bits_i);
         let abs_x = _mm512_abs_pd(x);
 
         // ---------------------------------------------------------------------
@@ -414,16 +414,16 @@ mod tests {
     const TOL_F64: f64 = 1e-14;
 
     // Helper to extract f32 lanes from __m512
-    unsafe fn extract_f32(v: __m512) -> [f32; 16] {
+        unsafe fn extract_f32(v: __m512) -> [f32; 16] {
         let mut out = [0.0f32; 16];
-        _mm512_storeu_ps(out.as_mut_ptr(), v);
+        unsafe { _mm512_storeu_ps(out.as_mut_ptr(), v) };
         out
     }
 
     // Helper to extract f64 lanes from __m512d
-    unsafe fn extract_f64(v: __m512d) -> [f64; 8] {
+        unsafe fn extract_f64(v: __m512d) -> [f64; 8] {
         let mut out = [0.0f64; 8];
-        _mm512_storeu_pd(out.as_mut_ptr(), v);
+        unsafe { _mm512_storeu_pd(out.as_mut_ptr(), v) };
         out
     }
 

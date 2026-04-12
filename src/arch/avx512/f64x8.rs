@@ -272,17 +272,15 @@ impl Rem for F64x8 {
             rhs.size
         );
 
+        // rem = a - trunc(a / b) * b
         unsafe {
-            let mut a = [0.0f64; LANE_COUNT];
-            let mut b = [0.0f64; LANE_COUNT];
-            _mm512_storeu_pd(a.as_mut_ptr(), self.elements);
-            _mm512_storeu_pd(b.as_mut_ptr(), rhs.elements);
-            for i in 0..self.size {
-                a[i] = a[i] % b[i];
-            }
+            let div = _mm512_div_pd(self.elements, rhs.elements);
+            // Truncate toward zero: roundscale with _MM_FROUND_TO_ZERO (0x03)
+            let trunc = _mm512_roundscale_pd(div, 0x03);
+            let prod = _mm512_mul_pd(trunc, rhs.elements);
             Self {
                 size: self.size,
-                elements: _mm512_loadu_pd(a.as_ptr()),
+                elements: _mm512_sub_pd(self.elements, prod),
             }
         }
     }
@@ -365,9 +363,6 @@ mod tests {
 
     #[repr(align(64))]
     struct Aligned([f64; 8]);
-
-    #[repr(align(64))]
-    struct AlignedBuf([f64; 9]);
 
     // ---- Align ----------------------------------------------------------------
 

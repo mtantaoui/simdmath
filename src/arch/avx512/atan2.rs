@@ -467,11 +467,13 @@ mod tests {
     /// Load 16 copies of `y` and `x`, call `_mm512_atan2_ps`, and return lane 0.
     #[target_feature(enable = "avx512f")]
     unsafe fn atan2_scalar(y: f32, x: f32) -> f32 {
-        let vy = _mm512_set1_ps(y);
-        let vx = _mm512_set1_ps(x);
-        let mut out = [0.0f32; 16];
-        _mm512_storeu_ps(out.as_mut_ptr(), _mm512_atan2_ps(vy, vx));
-        out[0]
+        unsafe {
+            let vy = _mm512_set1_ps(y);
+            let vx = _mm512_set1_ps(x);
+            let mut out = [0.0f32; 16];
+            _mm512_storeu_ps(out.as_mut_ptr(), _mm512_atan2_ps(vy, vx));
+            out[0]
+        }
     }
 
     // ---- Special / boundary values: zeros ------------------------------------
@@ -744,11 +746,13 @@ mod tests {
     /// Load 8 copies of `y` and `x`, call `_mm512_atan2_pd`, and return lane 0.
     #[target_feature(enable = "avx512f")]
     unsafe fn atan2_scalar_64(y: f64, x: f64) -> f64 {
-        let vy = _mm512_set1_pd(y);
-        let vx = _mm512_set1_pd(x);
-        let mut out = [0.0f64; 8];
-        _mm512_storeu_pd(out.as_mut_ptr(), _mm512_atan2_pd(vy, vx));
-        out[0]
+        unsafe {
+            let vy = _mm512_set1_pd(y);
+            let vx = _mm512_set1_pd(x);
+            let mut out = [0.0f64; 8];
+            _mm512_storeu_pd(out.as_mut_ptr(), _mm512_atan2_pd(vy, vx));
+            out[0]
+        }
     }
 
     // ---- f64 Special / boundary values: zeros --------------------------------

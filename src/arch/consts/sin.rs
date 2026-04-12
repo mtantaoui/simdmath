@@ -42,7 +42,6 @@ pub use super::cos::{
     PIO2_1_32,
     PIO2_1_64,
     PIO2_1T_32,
-    PIO2_1T_64,
     PIO2_2_64,
     PIO2_2T_64,
     S1_32,

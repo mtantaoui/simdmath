@@ -5,8 +5,8 @@
 //!
 //! # Precision
 //!
-//! This operation is **exact (0 ULP error)**. It performs a bitwise AND to
-//! clear the sign bit without any rounding or arithmetic.
+//! This operation is **exact (0 ULP error)**. It uses the dedicated `vabsq`
+//! floating-point absolute value instruction without any rounding or arithmetic.
 //!
 //! # Special Values
 //!

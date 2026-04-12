@@ -8,7 +8,7 @@
 //! ## f32 — Single-range reduction
 //!
 //! For `|x| > 1`: `atan(x) = π/2 - atan(1/x)`, reducing to `[-1, 1]`.
-//! A degree-9 odd polynomial approximates `atan` on that range.
+//! A 9-term odd minimax polynomial approximates `atan` on that range.
 //!
 //! ## f64 — Four-range reduction (musl libc)
 //!
@@ -68,7 +68,7 @@ use crate::arch::consts::atan::{
 /// # Description
 ///
 /// All 8 lanes are processed simultaneously without branches. The algorithm
-/// uses argument reduction for `|x| > 1` and a degree-9 minimax polynomial
+/// uses argument reduction for `|x| > 1` and a 9-term minimax polynomial
 /// for the core approximation.
 ///
 /// # Safety

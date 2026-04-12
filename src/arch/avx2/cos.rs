@@ -1,7 +1,7 @@
 //! AVX2 SIMD implementation of `cos(x)` for `f32` and `f64` vectors.
 //!
 //! This module provides 8-lane f32 and 4-lane f64 cosine implementations using
-//! the Payne-Hanek argument reduction algorithm and minimax polynomial
+//! the Cody-Waite argument reduction algorithm and minimax polynomial
 //! approximations ported from musl libc's `cosf.c`, `cos.c`, and kernel functions.
 //!
 //! # Algorithm
@@ -43,8 +43,8 @@ use std::arch::x86_64::*;
 
 use crate::arch::consts::cos::{
     C0_32, C1_32, C1_64, C2_32, C2_64, C3_32, C3_64, C4_64, C5_64, C6_64, FRAC_2_PI_32,
-    FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_1T_64, PIO2_2_64, PIO2_2T_64, S1_32,
-    S1_64, S2_32, S2_64, S3_32, S3_64, S4_32, S4_64, S5_64, S6_64, TOINT,
+    FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_2_64, PIO2_2T_64, S1_32, S1_64, S2_32,
+    S2_64, S3_32, S3_64, S4_32, S4_64, S5_64, S6_64, TOINT,
 };
 
 // =============================================================================
@@ -89,7 +89,7 @@ pub(crate) unsafe fn _mm256_cos_ps(x: __m256) -> __m256 {
 /// Internal f64 computation for f32 cosine (4 lanes).
 ///
 /// This helper computes cos(x) in f64 precision for 4 f32 values that have
-/// been promoted to f64. The extra precision ensures ≤1 ULP in the final f32.
+/// been promoted to f64. The extra precision ensures ≤2 ULP in the final f32.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn cos_ps_in_f64(x: __m256d) -> __m256d {
@@ -243,7 +243,6 @@ pub(crate) unsafe fn _mm256_cos_pd(x: __m256d) -> __m256d {
     unsafe {
         let frac_2_pi = _mm256_set1_pd(FRAC_2_PI_64);
         let pio2_1 = _mm256_set1_pd(PIO2_1_64);
-        let pio2_1t = _mm256_set1_pd(PIO2_1T_64);
         let pio2_2 = _mm256_set1_pd(PIO2_2_64);
         let pio2_2t = _mm256_set1_pd(PIO2_2T_64);
         let toint = _mm256_set1_pd(TOINT);
@@ -251,24 +250,29 @@ pub(crate) unsafe fn _mm256_cos_pd(x: __m256d) -> __m256d {
         // -------------------------------------------------------------------------
         // Step 1: Argument reduction with extended precision
         // -------------------------------------------------------------------------
+        // Uses musl's __rem_pio2 2nd-iteration approach unconditionally.
+        // This avoids catastrophic cancellation near multiples of π/2
+        // where the naive 2-step (pio2_1 + pio2_1t) loses precision.
+        //
+        // y = x - fn*(PIO2_1 + PIO2_2 + PIO2_2T) computed with two-sum
+        // error compensation, good to ~118 bits of effective precision.
 
         let fn_val = _mm256_sub_pd(_mm256_fmadd_pd(x, frac_2_pi, toint), toint);
         let n = _mm256_cvtpd_epi32(fn_val);
 
-        // Extended precision Cody-Waite reduction
-        // y = x - fn*(pio2_1 + pio2_1t) with compensation
-        let mut y = _mm256_fnmadd_pd(fn_val, pio2_1, x);
-        y = _mm256_fnmadd_pd(fn_val, pio2_1t, y);
+        // r = x - fn*pio2_1 (remove high 33 bits of n*π/2)
+        let r = _mm256_fnmadd_pd(fn_val, pio2_1, x);
 
-        // For very large arguments, apply additional correction terms
+        // Subtract next 33 bits: r2 = r - fn*pio2_2, tracking rounding error
+        let w = _mm256_mul_pd(fn_val, pio2_2);
+        let r2 = _mm256_sub_pd(r, w);
+        // Two-sum error: excess = (r - r2) - w
+        let excess = _mm256_sub_pd(_mm256_sub_pd(r, r2), w);
+        // Remaining tail with compensation: fn*pio2_2t - excess
+        let tail = _mm256_sub_pd(_mm256_mul_pd(fn_val, pio2_2t), excess);
+        let y = _mm256_sub_pd(r2, tail);
+
         let abs_x = _mm256_andnot_pd(_mm256_set1_pd(-0.0), x);
-        let large_thresh = _mm256_set1_pd(1e9); // Beyond this, need more precision
-        let is_large = _mm256_cmp_pd(abs_x, large_thresh, _CMP_GT_OQ);
-
-        // Additional reduction for large values
-        let y_corrected = _mm256_fnmadd_pd(fn_val, pio2_2, y);
-        let y_corrected = _mm256_fnmadd_pd(fn_val, pio2_2t, y_corrected);
-        let y = _mm256_blendv_pd(y, y_corrected, is_large);
 
         // -------------------------------------------------------------------------
         // Step 2: Compute kernels

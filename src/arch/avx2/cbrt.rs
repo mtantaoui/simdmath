@@ -42,7 +42,8 @@
 //!
 //! # Implementation Notes
 //!
-//! - **Integer division by 3**: Uses `_mm256_div_epi32` which requires AVX2.
+//! - **Integer division by 3**: Uses the multiply-by-magic-constant trick
+//!   (`mulhi(x, 0xAAAAAAAB) >> 1`), fully vectorized with no scalar fallback.
 //! - **f32 uses f64 intermediates**: Each 8-lane f32 vector is split into two
 //!   4-lane f64 vectors for Newton iterations to maintain precision.
 //! - **Subnormal handling**: Detected and scaled before processing to avoid
@@ -62,19 +63,32 @@ use crate::arch::consts::cbrt::{
 // f32 Implementation
 // ===========================================================================
 
-/// Divides each 32-bit integer lane by 3.
+/// Divides each unsigned 32-bit integer lane by 3.
 ///
-/// AVX2 lacks integer division, so we extract to array, divide, and repack.
-/// This is used only for the initial approximation (8 divisions), after which
-/// all heavy computation is in floating-point.
+/// AVX2 lacks integer division, so we use the multiply-by-magic-constant
+/// trick: `x / 3 = mulhi(x, 0xAAAAAAAB) >> 1` for unsigned 32-bit values.
+/// Even and odd lanes are processed separately since `_mm256_mul_epu32`
+/// only multiplies even-positioned 32-bit elements.
 #[inline]
 unsafe fn div_by_3_epi32(x: __m256i) -> __m256i {
-    let mut arr = [0_i32; 8];
-    unsafe { _mm256_storeu_si256(arr.as_mut_ptr() as *mut __m256i, x) };
-    for val in &mut arr {
-        *val = (*val as u32 / 3) as i32;
+    unsafe {
+        let magic = _mm256_set1_epi32(0xAAAAAAABu32 as i32);
+
+        // Even lanes (0, 2, 4, 6): multiply and take high 32 bits
+        let even_prod = _mm256_mul_epu32(x, magic);
+        let even_hi = _mm256_srli_epi64(even_prod, 32);
+        let even_result = _mm256_srli_epi64(even_hi, 1);
+
+        // Odd lanes (1, 3, 5, 7): shift to even positions, multiply, shift back
+        let x_odd = _mm256_srli_epi64(x, 32);
+        let odd_prod = _mm256_mul_epu32(x_odd, magic);
+        let odd_hi = _mm256_srli_epi64(odd_prod, 32);
+        let odd_result = _mm256_srli_epi64(odd_hi, 1);
+        let odd_shifted = _mm256_slli_epi64(odd_result, 32);
+
+        // Merge: even in low 32 of each 64-bit, odd in high 32
+        _mm256_or_si256(even_result, odd_shifted)
     }
-    unsafe { _mm256_loadu_si256(arr.as_ptr() as *const __m256i) }
 }
 
 /// Computes `cbrt(x)` (cube root) for each lane of an AVX2 `__m256` register.
@@ -261,70 +275,130 @@ pub(crate) unsafe fn _mm256_cbrt_ps(x: __m256) -> __m256 {
 /// ```
 #[inline]
 pub(crate) unsafe fn _mm256_cbrt_pd(x: __m256d) -> __m256d {
-    // -----------------------------------------------------------------------
-    // Process each lane scalar (f64 cbrt requires complex bit manipulation
-    // that AVX2 doesn't handle well for 64-bit integers)
-    // -----------------------------------------------------------------------
-    let mut x_arr = [0.0_f64; 4];
-    unsafe { _mm256_storeu_pd(x_arr.as_mut_ptr(), x) };
+    unsafe {
+        // -----------------------------------------------------------------------
+        // Constants
+        // -----------------------------------------------------------------------
+        let x1p54 = _mm256_set1_pd(X1P54_64);
+        let sign_mask_64 = _mm256_set1_epi64x(0x8000_0000_0000_0000_u64 as i64);
+        let hx_mask = _mm256_set1_epi64x(0x7fffffff);
+        let subnormal_threshold = _mm256_set1_epi64x(0x00100000);
+        let inf_threshold_m1 = _mm256_set1_epi64x(0x7ff00000 - 1);
+        let b1 = _mm256_set1_epi64x(B1_64 as i64);
+        let b2 = _mm256_set1_epi64x(B2_64 as i64);
+        let zero = _mm256_setzero_si256();
+        let magic = _mm256_set1_epi64x(0xAAAAAAAB_u64 as i64);
+        let p0 = _mm256_set1_pd(P0);
+        let p1 = _mm256_set1_pd(P1);
+        let p2 = _mm256_set1_pd(P2);
+        let p3 = _mm256_set1_pd(P3);
+        let p4 = _mm256_set1_pd(P4);
+        let round_bias = _mm256_set1_epi64x(ROUND_BIAS_64 as i64);
+        let round_mask = _mm256_set1_epi64x(ROUND_MASK_64 as i64);
 
-    let mut result_arr = [0.0_f64; 4];
+        // -----------------------------------------------------------------------
+        // Extract bit representation and sign
+        // -----------------------------------------------------------------------
+        let bits = _mm256_castpd_si256(x);
+        let sign_bits = _mm256_and_si256(bits, sign_mask_64);
 
-    for i in 0..4 {
-        let xi = x_arr[i];
-        let ui = xi.to_bits();
-        let mut hx = ((ui >> 32) as u32) & 0x7fffffff;
+        // Upper 32 bits of |x|: hx = (bits >> 32) & 0x7fffffff
+        let hx = _mm256_and_si256(_mm256_srli_epi64(bits, 32), hx_mask);
 
-        // Special case: Inf or NaN → return x + x
-        if hx >= 0x7ff00000 {
-            result_arr[i] = xi + xi;
-            continue;
-        }
+        // Absolute value bits (sign cleared)
+        let abs_bits = _mm256_andnot_si256(sign_mask_64, bits);
 
-        // Special case: zero → return x (preserves sign)
-        if hx == 0 && (ui & 0xffffffff) == 0 {
-            result_arr[i] = xi;
-            continue;
-        }
+        // -----------------------------------------------------------------------
+        // Special case detection
+        // -----------------------------------------------------------------------
 
-        // Subnormal: scale by 2^54
-        let mut u_bits = ui;
-        if hx < 0x00100000 {
-            let scaled = xi * X1P54_64;
-            u_bits = scaled.to_bits();
-            hx = ((u_bits >> 32) as u32) & 0x7fffffff;
-            if hx == 0 {
-                result_arr[i] = xi;
-                continue;
-            }
-            hx = hx / 3 + B2_64;
-        } else {
-            hx = hx / 3 + B1_64;
-        }
+        // Inf or NaN: hx >= 0x7ff00000 (signed compare OK since hx ∈ [0, 0x7fffffff])
+        let is_inf_or_nan = _mm256_cmpgt_epi64(hx, inf_threshold_m1);
 
-        // Construct initial approximation (~5 bits)
-        u_bits = (u_bits & (1_u64 << 63)) | ((hx as u64) << 32);
-        let mut t = f64::from_bits(u_bits);
+        // Zero: all non-sign bits are zero
+        let is_zero = _mm256_cmpeq_epi64(abs_bits, zero);
 
+        // Subnormal: hx < 0x00100000 and not zero
+        let is_hx_small = _mm256_cmpgt_epi64(subnormal_threshold, hx);
+        let is_subnormal = _mm256_andnot_si256(is_zero, is_hx_small);
+
+        // -----------------------------------------------------------------------
+        // Initial approximation via bit manipulation
+        // -----------------------------------------------------------------------
+
+        // Normal path: hx/3 + B1
+        // hx is in low 32 bits of 64-bit lanes; _mm256_mul_epu32 operates on those
+        let normal_prod = _mm256_mul_epu32(hx, magic);
+        let normal_hi = _mm256_srli_epi64(normal_prod, 32);
+        let normal_div3 = _mm256_srli_epi64(normal_hi, 1);
+        let hx_normal = _mm256_add_epi64(normal_div3, b1);
+
+        // Subnormal path: scale |x| by 2^54, recompute hx, then hx/3 + B2
+        let scaled_abs = _mm256_mul_pd(_mm256_castsi256_pd(abs_bits), x1p54);
+        let scaled_hx = _mm256_and_si256(
+            _mm256_srli_epi64(_mm256_castpd_si256(scaled_abs), 32),
+            hx_mask,
+        );
+        let sub_prod = _mm256_mul_epu32(scaled_hx, magic);
+        let sub_hi = _mm256_srli_epi64(sub_prod, 32);
+        let sub_div3 = _mm256_srli_epi64(sub_hi, 1);
+        let hx_subnormal = _mm256_add_epi64(sub_div3, b2);
+
+        // Select between normal and subnormal paths
+        let hx_approx = _mm256_blendv_epi8(hx_normal, hx_subnormal, is_subnormal);
+
+        // Construct initial approximation: sign | (hx_approx << 32)
+        let ui_approx = _mm256_or_si256(sign_bits, _mm256_slli_epi64(hx_approx, 32));
+        let t = _mm256_castsi256_pd(ui_approx);
+
+        // -----------------------------------------------------------------------
         // Polynomial refinement to ~23 bits: t = t * P(t³/x)
-        let r = (t * t) * (t / xi);
-        t *= (P0 + r * (P1 + r * P2)) + ((r * r) * r) * (P3 + r * P4);
+        // -----------------------------------------------------------------------
+        let r = _mm256_mul_pd(_mm256_mul_pd(t, t), _mm256_div_pd(t, x));
 
+        // P(r) = (P0 + r*(P1 + r*P2)) + r³*(P3 + r*P4)
+        let p1_rp2 = _mm256_add_pd(p1, _mm256_mul_pd(r, p2));
+        let part1 = _mm256_add_pd(p0, _mm256_mul_pd(r, p1_rp2));
+        let p3_rp4 = _mm256_add_pd(p3, _mm256_mul_pd(r, p4));
+        let r_sq = _mm256_mul_pd(r, r);
+        let r_cubed = _mm256_mul_pd(r_sq, r);
+        let part2 = _mm256_mul_pd(r_cubed, p3_rp4);
+        let poly = _mm256_add_pd(part1, part2);
+
+        let t = _mm256_mul_pd(t, poly);
+
+        // -----------------------------------------------------------------------
         // Round t to 23 bits (away from zero) for exact t*t
-        let t_bits = t.to_bits();
-        let t_rounded_bits = (t_bits.wrapping_add(ROUND_BIAS_64)) & ROUND_MASK_64;
-        t = f64::from_bits(t_rounded_bits);
+        // -----------------------------------------------------------------------
+        let t_bits = _mm256_castpd_si256(t);
+        let t_rounded_bits =
+            _mm256_and_si256(_mm256_add_epi64(t_bits, round_bias), round_mask);
+        let t = _mm256_castsi256_pd(t_rounded_bits);
 
+        // -----------------------------------------------------------------------
         // One Newton iteration to 53 bits
-        let s = t * t; // exact
-        let r = xi / s; // error ≤ 0.5 ulp
-        let w = t + t; // exact
-        t = t + t * (r - t) / (w + r);
+        // -----------------------------------------------------------------------
+        let s = _mm256_mul_pd(t, t); // exact
+        let r = _mm256_div_pd(x, s); // error ≤ 0.5 ulp
+        let w = _mm256_add_pd(t, t); // exact
+        let r_minus_t = _mm256_sub_pd(r, t);
+        let w_plus_r = _mm256_add_pd(w, r);
+        let correction = _mm256_div_pd(_mm256_mul_pd(t, r_minus_t), w_plus_r);
+        let mut result = _mm256_add_pd(t, correction);
 
-        result_arr[i] = t;
+        // -----------------------------------------------------------------------
+        // Handle special cases
+        // -----------------------------------------------------------------------
+
+        // Zero: return x (preserves sign of ±0)
+        result = _mm256_blendv_pd(result, x, _mm256_castsi256_pd(is_zero));
+
+        // Inf/NaN: return x + x (propagates NaN, returns ±∞ for ±∞)
+        let inf_nan_result = _mm256_add_pd(x, x);
+        result = _mm256_blendv_pd(result, inf_nan_result, _mm256_castsi256_pd(is_inf_or_nan));
+
+        result
     }
-
-    unsafe { _mm256_loadu_pd(result_arr.as_ptr()) }
 }
 
 // ===========================================================================

@@ -7,6 +7,15 @@
 //! # Precision
 //!
 //! Both implementations achieve **≤ 1 ULP** accuracy across the entire domain `[-1, 1]`.
+//!
+//! # Special Values
+//!
+//! | Input        | Output  |
+//! |--------------|---------|
+//! | `1.0`        | `0.0`   |
+//! | `-1.0`       | `π`     |
+//! | `|x| > 1`    | `NaN`   |
+//! | `NaN`        | `NaN`   |
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;

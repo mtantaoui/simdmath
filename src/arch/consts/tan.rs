@@ -28,7 +28,7 @@
 
 // Re-export argument reduction constants from cos.rs
 pub use crate::arch::consts::cos::{
-    FRAC_2_PI_32, FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_1T_64, PIO2_2_64,
+    FRAC_2_PI_32, FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_2_64,
     PIO2_2T_64, TOINT,
 };
 

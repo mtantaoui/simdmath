@@ -56,6 +56,31 @@ use crate::arch::consts::cbrt::{
 // f32 Implementation (4 lanes)
 // ===========================================================================
 
+/// Divides each 32-bit unsigned integer lane by 3 using the multiplicative inverse trick.
+///
+/// Uses `vmull_u32` (widening 2-lane multiply) to get the high 32 bits of
+/// `x * 0xAAAAAAAB`, then shifts right by 1.
+#[inline]
+unsafe fn div_by_3_neon_u32(x: uint32x4_t) -> uint32x4_t {
+    unsafe {
+        let magic = vdup_n_u32(0xAAAAAAAB);
+
+        // Low 2 lanes: widening multiply, take high 32 bits
+        let lo = vget_low_u32(x);
+        let prod_lo = vmull_u32(lo, magic);
+        let hi_lo = vshrn_n_u64::<32>(prod_lo);
+
+        // High 2 lanes
+        let hi = vget_high_u32(x);
+        let prod_hi = vmull_u32(hi, magic);
+        let hi_hi = vshrn_n_u64::<32>(prod_hi);
+
+        // Combine and shift right by 1
+        let combined = vcombine_u32(hi_lo, hi_hi);
+        vshrq_n_u32::<1>(combined)
+    }
+}
+
 /// Computes `cbrt(x)` (cube root) for each lane of a NEON `float32x4_t` register.
 ///
 /// # Precision
@@ -83,68 +108,144 @@ use crate::arch::consts::cbrt::{
 pub(crate) unsafe fn vcbrt_f32(x: float32x4_t) -> float32x4_t {
     unsafe {
         // -----------------------------------------------------------------------
-        // Process using scalar extraction (NEON lacks convenient int div by 3)
+        // Constants
         // -----------------------------------------------------------------------
-        let mut x_arr = [0.0_f32; 4];
-        vst1q_f32(x_arr.as_mut_ptr(), x);
+        let abs_mask = vdupq_n_u32(0x7fffffff);
+        let sign_mask = vdupq_n_u32(0x80000000);
+        let inf_threshold = vdupq_n_u32(0x7f800000);
+        let subnormal_threshold = vdupq_n_u32(0x00800000);
+        let b1 = vdupq_n_u32(B1_32);
+        let b2 = vdupq_n_u32(B2_32);
+        let zero_u32 = vdupq_n_u32(0);
 
-        let mut result_arr = [0.0_f32; 4];
+        // -----------------------------------------------------------------------
+        // Extract bit representation and sign
+        // -----------------------------------------------------------------------
+        let ui = vreinterpretq_u32_f32(x);
+        let hx = vandq_u32(ui, abs_mask);
+        let sign_bits = vandq_u32(ui, sign_mask);
 
-        for i in 0..4 {
-            let xi = x_arr[i];
-            let ui = xi.to_bits();
-            let mut hx = ui & 0x7fffffff;
+        // -----------------------------------------------------------------------
+        // Special case detection
+        // -----------------------------------------------------------------------
+        let is_inf_or_nan = vcgeq_u32(hx, inf_threshold);
+        let is_zero = vceqq_u32(hx, zero_u32);
+        let is_below_normal = vcltq_u32(hx, subnormal_threshold);
+        let is_subnormal = vandq_u32(is_below_normal, vmvnq_u32(is_zero));
 
-            // Special case: Inf or NaN
-            if hx >= 0x7f800000 {
-                result_arr[i] = xi + xi;
-                continue;
-            }
+        // -----------------------------------------------------------------------
+        // Initial approximation via bit manipulation
+        // -----------------------------------------------------------------------
 
-            // Special case: zero
-            if hx == 0 {
-                result_arr[i] = xi;
-                continue;
-            }
+        // Normal case: hx/3 + B1
+        let hx_normal = vaddq_u32(div_by_3_neon_u32(hx), b1);
 
-            // Extract sign
-            let sign = ui & 0x80000000;
+        // Subnormal case: scale |x| by 2^24, recompute hx, then hx_scaled/3 + B2
+        let x_abs = vreinterpretq_f32_u32(hx);
+        let x_scaled = vmulq_f32(x_abs, vdupq_n_f32(X1P24_32));
+        let hx_scaled = vandq_u32(vreinterpretq_u32_f32(x_scaled), abs_mask);
+        let hx_subnormal = vaddq_u32(div_by_3_neon_u32(hx_scaled), b2);
 
-            // Subnormal: scale by 2^24
-            if hx < 0x00800000 {
-                let scaled = xi * X1P24_32;
-                hx = scaled.to_bits() & 0x7fffffff;
-                hx = hx / 3 + B2_32;
-            } else {
-                hx = hx / 3 + B1_32;
-            }
+        // Select between normal and subnormal paths
+        let hx_approx = vbslq_u32(is_subnormal, hx_subnormal, hx_normal);
 
-            // Construct initial approximation
-            let t_bits = sign | hx;
-            let t = f32::from_bits(t_bits);
+        // Restore sign and convert to float
+        let t_f32 = vreinterpretq_f32_u32(vorrq_u32(sign_bits, hx_approx));
 
-            // Newton iterations in f64 for precision
-            let x_f64 = xi as f64;
-            let mut t_f64 = t as f64;
+        // Avoid division by zero in Newton iterations: replace zero lanes with 1.0
+        let x_safe = vbslq_f32(is_zero, vdupq_n_f32(1.0), x);
 
-            // First iteration: t = t * (2x + t³) / (x + 2t³)
-            let r = t_f64 * t_f64 * t_f64;
-            t_f64 = t_f64 * (x_f64 + x_f64 + r) / (x_f64 + r + r);
+        // -----------------------------------------------------------------------
+        // Newton–Raphson iterations in f64 (lower 2 lanes)
+        // -----------------------------------------------------------------------
+        let x_lo = vcvt_f64_f32(vget_low_f32(x_safe));
+        let t_lo = vcvt_f64_f32(vget_low_f32(t_f32));
 
-            // Second iteration
-            let r = t_f64 * t_f64 * t_f64;
-            t_f64 = t_f64 * (x_f64 + x_f64 + r) / (x_f64 + r + r);
+        // First iteration: t = t * (2x + t³) / (x + 2t³)
+        let r_lo = vmulq_f64(vmulq_f64(t_lo, t_lo), t_lo);
+        let two_x_lo = vaddq_f64(x_lo, x_lo);
+        let t_lo = vmulq_f64(
+            t_lo,
+            vdivq_f64(
+                vaddq_f64(two_x_lo, r_lo),
+                vaddq_f64(x_lo, vaddq_f64(r_lo, r_lo)),
+            ),
+        );
 
-            result_arr[i] = t_f64 as f32;
-        }
+        // Second iteration
+        let r_lo = vmulq_f64(vmulq_f64(t_lo, t_lo), t_lo);
+        let t_lo = vmulq_f64(
+            t_lo,
+            vdivq_f64(
+                vaddq_f64(two_x_lo, r_lo),
+                vaddq_f64(x_lo, vaddq_f64(r_lo, r_lo)),
+            ),
+        );
 
-        vld1q_f32(result_arr.as_ptr())
+        // -----------------------------------------------------------------------
+        // Newton–Raphson iterations in f64 (upper 2 lanes)
+        // -----------------------------------------------------------------------
+        let x_hi = vcvt_high_f64_f32(x_safe);
+        let t_hi = vcvt_high_f64_f32(t_f32);
+
+        // First iteration
+        let r_hi = vmulq_f64(vmulq_f64(t_hi, t_hi), t_hi);
+        let two_x_hi = vaddq_f64(x_hi, x_hi);
+        let t_hi = vmulq_f64(
+            t_hi,
+            vdivq_f64(
+                vaddq_f64(two_x_hi, r_hi),
+                vaddq_f64(x_hi, vaddq_f64(r_hi, r_hi)),
+            ),
+        );
+
+        // Second iteration
+        let r_hi = vmulq_f64(vmulq_f64(t_hi, t_hi), t_hi);
+        let t_hi = vmulq_f64(
+            t_hi,
+            vdivq_f64(
+                vaddq_f64(two_x_hi, r_hi),
+                vaddq_f64(x_hi, vaddq_f64(r_hi, r_hi)),
+            ),
+        );
+
+        // -----------------------------------------------------------------------
+        // Combine halves and handle special cases
+        // -----------------------------------------------------------------------
+        let result_lo = vcvt_f32_f64(t_lo);
+        let result_hi = vcvt_f32_f64(t_hi);
+        let mut result = vcombine_f32(result_lo, result_hi);
+
+        // Zero: return x (preserves sign of ±0)
+        result = vbslq_f32(is_zero, x, result);
+
+        // Inf/NaN: return x + x (propagates NaN, returns ±∞ for ±∞)
+        let inf_nan_result = vaddq_f32(x, x);
+        result = vbslq_f32(is_inf_or_nan, inf_nan_result, result);
+
+        result
     }
 }
 
 // ===========================================================================
 // f64 Implementation (2 lanes)
 // ===========================================================================
+
+/// Divides each 32-bit value (sitting in the low 32 bits of 2 u64 lanes) by 3.
+///
+/// Narrows to `uint32x2_t`, uses `vmull_u32` widening multiply with the
+/// magic constant, extracts the high 32 bits, and shifts right by 1.
+/// Result remains in `uint64x2_t` lanes.
+#[inline]
+unsafe fn div_by_3_u32_in_u64(hx: uint64x2_t) -> uint64x2_t {
+    unsafe {
+        let hx_u32 = vmovn_u64(hx); // narrow 2×u64 → 2×u32 (low 32 bits)
+        let magic = vdup_n_u32(0xAAAAAAAB);
+        let prod = vmull_u32(hx_u32, magic); // 2×u64
+        let hi = vshrq_n_u64::<32>(prod); // high 32 bits in u64 lanes
+        vshrq_n_u64::<1>(hi) // >> 1
+    }
+}
 
 /// Computes `cbrt(x)` (cube root) for each lane of a NEON `float64x2_t` register.
 ///
@@ -172,68 +273,122 @@ pub(crate) unsafe fn vcbrt_f32(x: float32x4_t) -> float32x4_t {
 pub(crate) unsafe fn vcbrt_f64(x: float64x2_t) -> float64x2_t {
     unsafe {
         // -----------------------------------------------------------------------
-        // Process each lane scalar (f64 cbrt requires complex bit manipulation)
+        // Constants
         // -----------------------------------------------------------------------
-        let mut x_arr = [0.0_f64; 2];
-        vst1q_f64(x_arr.as_mut_ptr(), x);
+        let sign_mask_u64 = vdupq_n_u64(1u64 << 63);
+        let abs_mask_u32_in_u64 = vdupq_n_u64(0x7fffffff);
+        let inf_thresh = vdupq_n_u64(0x7ff00000);
+        let subnormal_thresh = vdupq_n_u64(0x00100000);
+        let zero_u64 = vdupq_n_u64(0);
 
-        let mut result_arr = [0.0_f64; 2];
+        // -----------------------------------------------------------------------
+        // Extract bit representation
+        // -----------------------------------------------------------------------
+        let bits = vreinterpretq_u64_f64(x);
 
-        for i in 0..2 {
-            let xi = x_arr[i];
-            let ui = xi.to_bits();
-            let mut hx = ((ui >> 32) as u32) & 0x7fffffff;
+        // Upper 32 bits of each f64 (exponent + high mantissa)
+        let hx_u64 = vshrq_n_u64::<32>(bits);
 
-            // Special case: Inf or NaN
-            if hx >= 0x7ff00000 {
-                result_arr[i] = xi + xi;
-                continue;
-            }
+        // Absolute upper 32 bits
+        let hx = vandq_u64(hx_u64, abs_mask_u32_in_u64);
 
-            // Special case: zero
-            if hx == 0 && (ui & 0xffffffff) == 0 {
-                result_arr[i] = xi;
-                continue;
-            }
+        // Sign bit (bit 63)
+        let sign = vandq_u64(bits, sign_mask_u64);
 
-            // Subnormal: scale by 2^54
-            let mut u_bits = ui;
-            if hx < 0x00100000 {
-                let scaled = xi * X1P54_64;
-                u_bits = scaled.to_bits();
-                hx = ((u_bits >> 32) as u32) & 0x7fffffff;
-                if hx == 0 {
-                    result_arr[i] = xi;
-                    continue;
-                }
-                hx = hx / 3 + B2_64;
-            } else {
-                hx = hx / 3 + B1_64;
-            }
+        // Absolute value bits for zero check
+        let abs_bits = vandq_u64(bits, vdupq_n_u64(0x7fffffffffffffff));
 
-            // Construct initial approximation (~5 bits)
-            u_bits = (u_bits & (1_u64 << 63)) | ((hx as u64) << 32);
-            let mut t = f64::from_bits(u_bits);
+        // -----------------------------------------------------------------------
+        // Special case detection
+        // -----------------------------------------------------------------------
+        let is_inf_or_nan = vcgeq_u64(hx, inf_thresh);
+        let is_zero = vceqq_u64(abs_bits, zero_u64);
+        let is_below_normal = vcltq_u64(hx, subnormal_thresh);
+        let all_ones_u64 = vreinterpretq_u64_s64(vdupq_n_s64(-1));
+        let not_zero = veorq_u64(is_zero, all_ones_u64);
+        let is_subnormal = vandq_u64(is_below_normal, not_zero);
 
-            // Polynomial refinement to ~23 bits: t = t * P(t³/x)
-            let r = (t * t) * (t / xi);
-            t *= (P0 + r * (P1 + r * P2)) + ((r * r) * r) * (P3 + r * P4);
+        // -----------------------------------------------------------------------
+        // Initial approximation via bit manipulation
+        // -----------------------------------------------------------------------
 
-            // Round t to 23 bits (away from zero) for exact t*t
-            let t_bits = t.to_bits();
-            let t_rounded_bits = (t_bits.wrapping_add(ROUND_BIAS_64)) & ROUND_MASK_64;
-            t = f64::from_bits(t_rounded_bits);
+        // Normal case: hx/3 + B1_64
+        let hx_normal = vaddq_u64(div_by_3_u32_in_u64(hx), vdupq_n_u64(B1_64 as u64));
 
-            // One Newton iteration to 53 bits
-            let s = t * t;
-            let r = xi / s;
-            let w = t + t;
-            t = t + t * (r - t) / (w + r);
+        // Subnormal case: scale |x| by 2^54, recompute hx, then hx_scaled/3 + B2_64
+        let x_abs = vreinterpretq_f64_u64(abs_bits);
+        let x_scaled = vmulq_f64(x_abs, vdupq_n_f64(X1P54_64));
+        let scaled_bits = vreinterpretq_u64_f64(x_scaled);
+        let hx_scaled = vandq_u64(vshrq_n_u64::<32>(scaled_bits), abs_mask_u32_in_u64);
+        let hx_subnormal = vaddq_u64(div_by_3_u32_in_u64(hx_scaled), vdupq_n_u64(B2_64 as u64));
 
-            result_arr[i] = t;
-        }
+        // Select between normal and subnormal
+        let hx_result = vbslq_u64(is_subnormal, hx_subnormal, hx_normal);
 
-        vld1q_f64(result_arr.as_ptr())
+        // Reconstruct initial approximation: sign | (hx_result << 32)
+        let approx_bits = vorrq_u64(sign, vshlq_n_u64::<32>(hx_result));
+        let t = vreinterpretq_f64_u64(approx_bits);
+
+        // Avoid division by zero: replace zero lanes with 1.0
+        let x_safe = vbslq_f64(is_zero, vdupq_n_f64(1.0), x);
+
+        // -----------------------------------------------------------------------
+        // Polynomial refinement to ~23 bits: t = t * P(t³/x)
+        // -----------------------------------------------------------------------
+        let t2 = vmulq_f64(t, t);
+        let r = vmulq_f64(t2, vdivq_f64(t, x_safe));
+
+        // P(r) = (P0 + r*(P1 + r*P2)) + r³*(P3 + r*P4)
+        let r2 = vmulq_f64(r, r);
+        let r3 = vmulq_f64(r2, r);
+
+        // P1 + r*P2  →  vfmaq_f64(P1, r, P2) = r*P2 + P1
+        let p12 = vfmaq_f64(vdupq_n_f64(P1), r, vdupq_n_f64(P2));
+        // P0 + r*(P1 + r*P2)  →  vfmaq_f64(P0, r, p12) = r*p12 + P0
+        let low_part = vfmaq_f64(vdupq_n_f64(P0), r, p12);
+
+        // P3 + r*P4  →  vfmaq_f64(P3, r, P4) = r*P4 + P3
+        let p34 = vfmaq_f64(vdupq_n_f64(P3), r, vdupq_n_f64(P4));
+        // r³ * (P3 + r*P4)
+        let high_part = vmulq_f64(r3, p34);
+
+        let poly = vaddq_f64(low_part, high_part);
+        let t = vmulq_f64(t, poly);
+
+        // -----------------------------------------------------------------------
+        // Round t to 23 bits (away from zero) for exact t*t
+        // -----------------------------------------------------------------------
+        let t_bits = vreinterpretq_u64_f64(t);
+        let rounded_bits = vandq_u64(
+            vaddq_u64(t_bits, vdupq_n_u64(ROUND_BIAS_64)),
+            vdupq_n_u64(ROUND_MASK_64),
+        );
+        let t = vreinterpretq_f64_u64(rounded_bits);
+
+        // -----------------------------------------------------------------------
+        // One Newton iteration to 53 bits
+        // t = t + t * (r - t) / (w + r)  where s = t*t, r = x/s, w = t+t
+        // -----------------------------------------------------------------------
+        let s = vmulq_f64(t, t);
+        let r = vdivq_f64(x_safe, s);
+        let w = vaddq_f64(t, t);
+        // t * (r - t) / (w + r)
+        let diff = vsubq_f64(r, t);
+        let denom = vaddq_f64(w, r);
+        let correction = vmulq_f64(t, vdivq_f64(diff, denom));
+        let t = vaddq_f64(t, correction);
+
+        // -----------------------------------------------------------------------
+        // Handle special cases
+        // -----------------------------------------------------------------------
+        // Zero: return x (preserves sign of ±0)
+        let mut result = vbslq_f64(is_zero, x, t);
+
+        // Inf/NaN: return x + x (propagates NaN, returns ±∞ for ±∞)
+        let inf_nan_result = vaddq_f64(x, x);
+        result = vbslq_f64(is_inf_or_nan, inf_nan_result, result);
+
+        result
     }
 }
 

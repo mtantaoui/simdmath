@@ -12,7 +12,7 @@
 //!    and `|r| ≤ ln(2)/2 ≈ 0.347`. The reduction uses extended-precision
 //!    `ln(2) = ln2_hi + ln2_lo` to minimize cancellation.
 //!
-//! 2. **Polynomial approximation**: Compute a degree-5 minimax polynomial `P(r²)`:
+//! 2. **Polynomial approximation**: Compute a 5-term minimax polynomial `P(r²)`:
 //!    ```text
 //!    c = r - r²*(P1 + r²*(P2 + r²*(P3 + r²*(P4 + r²*P5))))
 //!    exp(r) ≈ 1 + 2r / (2 - c) = 1 + r + r*c/(2 - c)
@@ -104,7 +104,7 @@ pub(crate) unsafe fn _mm512_exp_ps(x: __m512) -> __m512 {
 
 /// Computes `exp(x)` for each lane of an AVX-512 `__m512d` register.
 ///
-/// Uses the fdlibm algorithm with degree-5 minimax polynomial after
+/// Uses the fdlibm algorithm with 5-term minimax polynomial after
 /// argument reduction by `ln(2)`. Handles overflow, underflow, and special values.
 ///
 /// # Precision
@@ -129,7 +129,7 @@ pub(crate) unsafe fn _mm512_exp_pd(x: __m512d) -> __m512d {
 ///
 /// Implements the fdlibm `e_exp.c` algorithm:
 /// 1. Reduce `x = k*ln(2) + r` where `|r| ≤ ln(2)/2`
-/// 2. Compute `c = r - r²*P(r²)` using degree-5 minimax polynomial
+/// 2. Compute `c = r - r²*P(r²)` using 5-term minimax polynomial
 /// 3. `exp(r) = 1 + r + r*c/(2-c)`
 /// 4. Scale by `2^k`
 #[inline]
@@ -246,9 +246,7 @@ unsafe fn exp_core_f64(x: __m512d) -> __m512d {
         let result = _mm512_mask_blend_pd(is_neg_inf, result, zero);
 
         // x is NaN → NaN
-        let result = _mm512_mask_blend_pd(is_nan, result, nan);
-
-        result
+        _mm512_mask_blend_pd(is_nan, result, nan)
     }
 }
 

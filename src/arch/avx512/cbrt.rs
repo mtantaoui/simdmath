@@ -57,6 +57,34 @@ use crate::arch::consts::cbrt::{
 };
 
 // ===========================================================================
+// Integer division by 3 for 32-bit lanes in a 512-bit register
+// ===========================================================================
+
+/// Divides each unsigned 32-bit integer lane by 3 using the multiply-by-magic trick.
+///
+/// AVX-512 has no integer division. We use: `x / 3 = mulhi(x, 0xAAAAAAAB) >> 1`.
+/// Since `_mm512_mul_epu32` only multiplies the low 32 bits of each 64-bit lane,
+/// we process even and odd 32-bit lanes separately.
+#[inline]
+#[target_feature(enable = "avx512f")]
+unsafe fn div_by_3_epi32_512(x: __m512i) -> __m512i {
+    let magic = _mm512_set1_epi32(0xAAAAAAABu32 as i32);
+
+    // Even lanes (0, 2, 4, …): low 32 bits of each 64-bit lane
+    let even_prod = _mm512_mul_epu32(x, magic); // 64-bit products
+    let even_hi = _mm512_srli_epi64(even_prod, 32); // high 32 bits
+    let even_result = _mm512_srli_epi64(even_hi, 1); // >> 1
+
+    // Odd lanes (1, 3, 5, …): shift into even positions, multiply, shift back
+    let x_odd = _mm512_srli_epi64(x, 32);
+    let odd_prod = _mm512_mul_epu32(x_odd, magic);
+    let odd_hi = _mm512_srli_epi64(odd_prod, 32);
+    let odd_result = _mm512_slli_epi64(_mm512_srli_epi64(odd_hi, 1), 32);
+
+    _mm512_or_si512(even_result, odd_result)
+}
+
+// ===========================================================================
 // f32 Implementation (16 lanes)
 // ===========================================================================
 
@@ -88,62 +116,140 @@ use crate::arch::consts::cbrt::{
 pub(crate) unsafe fn _mm512_cbrt_ps(x: __m512) -> __m512 {
     unsafe {
         // -----------------------------------------------------------------------
-        // Process using scalar extraction (AVX-512 lacks convenient int div by 3)
+        // Constants
         // -----------------------------------------------------------------------
-        let mut x_arr = [0.0_f32; 16];
-        _mm512_storeu_ps(x_arr.as_mut_ptr(), x);
+        let x1p24 = _mm512_set1_ps(X1P24_32);
+        let abs_mask = _mm512_set1_epi32(0x7FFFFFFFu32 as i32);
+        let sign_mask = _mm512_set1_epi32(0x80000000u32 as i32);
+        let inf_threshold = _mm512_set1_epi32(0x7F800000u32 as i32);
+        let subnormal_threshold = _mm512_set1_epi32(0x00800000u32 as i32);
+        let b1 = _mm512_set1_epi32(B1_32 as i32);
+        let b2 = _mm512_set1_epi32(B2_32 as i32);
+        let zero = _mm512_setzero_si512();
+        let one_i32 = _mm512_set1_epi32(1);
 
-        let mut result_arr = [0.0_f32; 16];
+        // -----------------------------------------------------------------------
+        // Extract bit representation and sign
+        // -----------------------------------------------------------------------
+        let ui = _mm512_castps_si512(x);
+        let hx = _mm512_and_si512(ui, abs_mask);
+        let sign_bits = _mm512_and_si512(ui, sign_mask);
 
-        for i in 0..16 {
-            let xi = x_arr[i];
-            let ui = xi.to_bits();
-            let mut hx = ui & 0x7fffffff;
+        // -----------------------------------------------------------------------
+        // Special case detection (AVX-512 mask registers)
+        // -----------------------------------------------------------------------
 
-            // Special case: Inf or NaN
-            if hx >= 0x7f800000 {
-                result_arr[i] = xi + xi;
-                continue;
-            }
+        // Inf or NaN: hx >= 0x7f800000 (hx is always non-negative, signed cmp works)
+        let is_inf_nan: __mmask16 =
+            _mm512_cmpgt_epi32_mask(hx, _mm512_sub_epi32(inf_threshold, one_i32));
 
-            // Special case: zero
-            if hx == 0 {
-                result_arr[i] = xi;
-                continue;
-            }
+        // Zero: hx == 0
+        let is_zero: __mmask16 = _mm512_cmpeq_epi32_mask(hx, zero);
 
-            // Extract sign
-            let sign = ui & 0x80000000;
+        // Subnormal: 0 < hx < 0x00800000
+        let hx_lt_subnormal: __mmask16 = _mm512_cmpgt_epi32_mask(subnormal_threshold, hx);
+        let is_subnormal: __mmask16 = hx_lt_subnormal & !is_zero;
 
-            // Subnormal: scale by 2^24
-            if hx < 0x00800000 {
-                let scaled = xi * X1P24_32;
-                hx = scaled.to_bits() & 0x7fffffff;
-                hx = hx / 3 + B2_32;
-            } else {
-                hx = hx / 3 + B1_32;
-            }
+        // -----------------------------------------------------------------------
+        // Initial approximation via bit manipulation
+        // -----------------------------------------------------------------------
 
-            // Construct initial approximation
-            let t_bits = sign | hx;
-            let t = f32::from_bits(t_bits);
+        // Normal case: hx/3 + B1
+        let hx_normal = _mm512_add_epi32(div_by_3_epi32_512(hx), b1);
 
-            // Newton iterations in f64 for precision
-            let x_f64 = xi as f64;
-            let mut t_f64 = t as f64;
+        // Subnormal case: reconstruct |x| with sign, scale by 2^24, then hx_scaled/3 + B2
+        let x_with_sign = _mm512_castsi512_ps(_mm512_or_si512(sign_bits, hx));
+        let x_scaled = _mm512_mul_ps(x_with_sign, x1p24);
+        let hx_scaled = _mm512_and_si512(_mm512_castps_si512(x_scaled), abs_mask);
+        let hx_subnormal = _mm512_add_epi32(div_by_3_epi32_512(hx_scaled), b2);
 
-            // First iteration: t = t * (2x + t³) / (x + 2t³)
-            let r = t_f64 * t_f64 * t_f64;
-            t_f64 = t_f64 * (x_f64 + x_f64 + r) / (x_f64 + r + r);
+        // Select between normal and subnormal paths
+        let hx_approx = _mm512_mask_blend_epi32(is_subnormal, hx_normal, hx_subnormal);
 
-            // Second iteration
-            let r = t_f64 * t_f64 * t_f64;
-            t_f64 = t_f64 * (x_f64 + x_f64 + r) / (x_f64 + r + r);
+        // Restore sign and convert to float
+        let t_f32 = _mm512_castsi512_ps(_mm512_or_si512(sign_bits, hx_approx));
 
-            result_arr[i] = t_f64 as f32;
-        }
+        // -----------------------------------------------------------------------
+        // Newton–Raphson iterations in f64 (lower 8 lanes)
+        // -----------------------------------------------------------------------
+        let x_si = _mm512_castps_si512(x);
+        let t_si = _mm512_castps_si512(t_f32);
 
-        _mm512_loadu_ps(result_arr.as_ptr())
+        let x_low_f32 = _mm256_castsi256_ps(_mm512_castsi512_si256(x_si));
+        let x_low = _mm512_cvtps_pd(x_low_f32);
+
+        let t_low_f32 = _mm256_castsi256_ps(_mm512_castsi512_si256(t_si));
+        let t_low = _mm512_cvtps_pd(t_low_f32);
+
+        // First iteration: t = t * (2x + t³) / (x + 2t³)
+        let r_low = _mm512_mul_pd(t_low, _mm512_mul_pd(t_low, t_low));
+        let two_x_low = _mm512_add_pd(x_low, x_low);
+        let t_low = _mm512_mul_pd(
+            t_low,
+            _mm512_div_pd(
+                _mm512_add_pd(two_x_low, r_low),
+                _mm512_add_pd(x_low, _mm512_add_pd(r_low, r_low)),
+            ),
+        );
+
+        // Second iteration
+        let r_low = _mm512_mul_pd(t_low, _mm512_mul_pd(t_low, t_low));
+        let t_low_final = _mm512_mul_pd(
+            t_low,
+            _mm512_div_pd(
+                _mm512_add_pd(two_x_low, r_low),
+                _mm512_add_pd(x_low, _mm512_add_pd(r_low, r_low)),
+            ),
+        );
+
+        // -----------------------------------------------------------------------
+        // Newton–Raphson iterations in f64 (upper 8 lanes)
+        // -----------------------------------------------------------------------
+        let x_high_f32 = _mm256_castsi256_ps(_mm512_extracti64x4_epi64(x_si, 1));
+        let x_high = _mm512_cvtps_pd(x_high_f32);
+
+        let t_high_f32 = _mm256_castsi256_ps(_mm512_extracti64x4_epi64(t_si, 1));
+        let t_high = _mm512_cvtps_pd(t_high_f32);
+
+        // First iteration
+        let r_high = _mm512_mul_pd(t_high, _mm512_mul_pd(t_high, t_high));
+        let two_x_high = _mm512_add_pd(x_high, x_high);
+        let t_high = _mm512_mul_pd(
+            t_high,
+            _mm512_div_pd(
+                _mm512_add_pd(two_x_high, r_high),
+                _mm512_add_pd(x_high, _mm512_add_pd(r_high, r_high)),
+            ),
+        );
+
+        // Second iteration
+        let r_high = _mm512_mul_pd(t_high, _mm512_mul_pd(t_high, t_high));
+        let t_high_final = _mm512_mul_pd(
+            t_high,
+            _mm512_div_pd(
+                _mm512_add_pd(two_x_high, r_high),
+                _mm512_add_pd(x_high, _mm512_add_pd(r_high, r_high)),
+            ),
+        );
+
+        // -----------------------------------------------------------------------
+        // Combine halves back to 16×f32 and handle special cases
+        // -----------------------------------------------------------------------
+        let result_low = _mm512_cvtpd_ps(t_low_final); // __m256
+        let result_high = _mm512_cvtpd_ps(t_high_final); // __m256
+        let mut result = _mm512_castsi512_ps(_mm512_inserti64x4(
+            _mm512_castps_si512(_mm512_castps256_ps512(result_low)),
+            _mm256_castps_si256(result_high),
+            1,
+        ));
+
+        // Zero: return x (preserves sign of ±0)
+        result = _mm512_mask_blend_ps(is_zero, result, x);
+
+        // Inf/NaN: return x + x (propagates NaN, returns ±∞ for ±∞)
+        result = _mm512_mask_blend_ps(is_inf_nan, result, _mm512_add_ps(x, x));
+
+        result
     }
 }
 
@@ -176,71 +282,121 @@ pub(crate) unsafe fn _mm512_cbrt_ps(x: __m512) -> __m512 {
 #[inline]
 #[target_feature(enable = "avx512f")]
 pub(crate) unsafe fn _mm512_cbrt_pd(x: __m512d) -> __m512d {
-    unsafe {
-        // -----------------------------------------------------------------------
-        // Process each lane scalar (f64 cbrt requires complex bit manipulation)
-        // -----------------------------------------------------------------------
-        let mut x_arr = [0.0_f64; 8];
-        _mm512_storeu_pd(x_arr.as_mut_ptr(), x);
+    // -----------------------------------------------------------------------
+    // Constants
+    // -----------------------------------------------------------------------
+    let abs_mask_64 = _mm512_set1_epi64(0x7FFFFFFFFFFFFFFFu64 as i64);
+    let abs_mask_32 = _mm512_set1_epi64(0x7FFFFFFF_i64);
+    let sign_mask = _mm512_set1_epi64(1_i64 << 63);
+    let inf_threshold = _mm512_set1_epi64(0x7FF00000_i64);
+    let subnormal_threshold = _mm512_set1_epi64(0x00100000_i64);
+    let zero_si = _mm512_setzero_si512();
 
-        let mut result_arr = [0.0_f64; 8];
+    // -----------------------------------------------------------------------
+    // Extract bit representation, upper 32 bits (exponent+mantissa), sign
+    // -----------------------------------------------------------------------
+    let bits = _mm512_castpd_si512(x);
+    let hx_full = _mm512_srli_epi64(bits, 32); // upper 32 bits → low half of each 64-bit lane
+    let hx = _mm512_and_si512(hx_full, abs_mask_32); // strip sign
+    let sign_bits = _mm512_and_si512(bits, sign_mask);
 
-        for i in 0..8 {
-            let xi = x_arr[i];
-            let ui = xi.to_bits();
-            let mut hx = ((ui >> 32) as u32) & 0x7fffffff;
+    // -----------------------------------------------------------------------
+    // Special case detection
+    // -----------------------------------------------------------------------
+    let abs_bits = _mm512_and_si512(bits, abs_mask_64);
 
-            // Special case: Inf or NaN
-            if hx >= 0x7ff00000 {
-                result_arr[i] = xi + xi;
-                continue;
-            }
+    // Inf/NaN: hx >= 0x7ff00000 (signed cmp works since hx ∈ [0, 0x7fffffff])
+    let is_inf_nan: __mmask8 =
+        _mm512_cmpgt_epi64_mask(hx, _mm512_sub_epi64(inf_threshold, _mm512_set1_epi64(1)));
 
-            // Special case: zero
-            if hx == 0 && (ui & 0xffffffff) == 0 {
-                result_arr[i] = xi;
-                continue;
-            }
+    // Zero: all 64 bits of |x| == 0
+    let is_zero: __mmask8 = _mm512_cmpeq_epi64_mask(abs_bits, zero_si);
 
-            // Subnormal: scale by 2^54
-            let mut u_bits = ui;
-            if hx < 0x00100000 {
-                let scaled = xi * X1P54_64;
-                u_bits = scaled.to_bits();
-                hx = ((u_bits >> 32) as u32) & 0x7fffffff;
-                if hx == 0 {
-                    result_arr[i] = xi;
-                    continue;
-                }
-                hx = hx / 3 + B2_64;
-            } else {
-                hx = hx / 3 + B1_64;
-            }
+    // Subnormal: 0 < |x| < 2^-1022 → hx < 0x00100000 and not zero
+    let hx_lt_sub: __mmask8 = _mm512_cmpgt_epi64_mask(subnormal_threshold, hx);
+    let is_subnormal: __mmask8 = hx_lt_sub & !is_zero;
 
-            // Construct initial approximation (~5 bits)
-            u_bits = (u_bits & (1_u64 << 63)) | ((hx as u64) << 32);
-            let mut t = f64::from_bits(u_bits);
+    // -----------------------------------------------------------------------
+    // Subnormal path: scale by 2^54, recompute bits and hx
+    // -----------------------------------------------------------------------
+    let x_scaled = _mm512_mul_pd(x, _mm512_set1_pd(X1P54_64));
+    let bits_scaled = _mm512_castpd_si512(x_scaled);
+    let hx_scaled = _mm512_and_si512(_mm512_srli_epi64(bits_scaled, 32), abs_mask_32);
 
-            // Polynomial refinement to ~23 bits: t = t * P(t³/x)
-            let r = (t * t) * (t / xi);
-            t *= (P0 + r * (P1 + r * P2)) + ((r * r) * r) * (P3 + r * P4);
+    // -----------------------------------------------------------------------
+    // Integer division by 3 on upper-32-bit values (in low 32 bits of 64-bit lanes)
+    // _mm512_mul_epu32 multiplies the low 32 bits of each 64-bit lane
+    // -----------------------------------------------------------------------
+    let magic = _mm512_set1_epi64(0xAAAAAAABu64 as i64);
+    let b1_vec = _mm512_set1_epi64(B1_64 as i64);
+    let b2_vec = _mm512_set1_epi64(B2_64 as i64);
 
-            // Round t to 23 bits (away from zero) for exact t*t
-            let t_bits = t.to_bits();
-            let t_rounded_bits = (t_bits.wrapping_add(ROUND_BIAS_64)) & ROUND_MASK_64;
-            t = f64::from_bits(t_rounded_bits);
+    // Normal: hx/3 + B1_64
+    let prod_n = _mm512_mul_epu32(hx, magic);
+    let hx_normal = _mm512_add_epi64(_mm512_srli_epi64(_mm512_srli_epi64(prod_n, 32), 1), b1_vec);
 
-            // One Newton iteration to 53 bits
-            let s = t * t;
-            let r = xi / s;
-            let w = t + t;
-            t = t + t * (r - t) / (w + r);
+    // Subnormal: hx_scaled/3 + B2_64
+    let prod_s = _mm512_mul_epu32(hx_scaled, magic);
+    let hx_subnormal =
+        _mm512_add_epi64(_mm512_srli_epi64(_mm512_srli_epi64(prod_s, 32), 1), b2_vec);
 
-            result_arr[i] = t;
-        }
+    // Select normal / subnormal
+    let hx_approx = _mm512_mask_blend_epi64(is_subnormal, hx_normal, hx_subnormal);
 
-        _mm512_loadu_pd(result_arr.as_ptr())
-    }
+    // -----------------------------------------------------------------------
+    // Construct initial approximation: sign | (hx_approx << 32)
+    // -----------------------------------------------------------------------
+    let t_bits = _mm512_or_si512(sign_bits, _mm512_slli_epi64(hx_approx, 32));
+    let mut t = _mm512_castsi512_pd(t_bits);
+
+    // -----------------------------------------------------------------------
+    // Polynomial refinement to ~23 bits: t = t * P(r), r = t²*(t/x)
+    // -----------------------------------------------------------------------
+    let r = _mm512_mul_pd(_mm512_mul_pd(t, t), _mm512_div_pd(t, x));
+
+    let p0 = _mm512_set1_pd(P0);
+    let p1 = _mm512_set1_pd(P1);
+    let p2 = _mm512_set1_pd(P2);
+    let p3 = _mm512_set1_pd(P3);
+    let p4 = _mm512_set1_pd(P4);
+
+    // (P0 + r*(P1 + r*P2)) + r³*(P3 + r*P4)
+    let poly_lo = _mm512_fmadd_pd(r, _mm512_fmadd_pd(r, p2, p1), p0);
+    let r2 = _mm512_mul_pd(r, r);
+    let r3 = _mm512_mul_pd(r2, r);
+    let poly_hi = _mm512_mul_pd(r3, _mm512_fmadd_pd(r, p4, p3));
+    t = _mm512_mul_pd(t, _mm512_add_pd(poly_lo, poly_hi));
+
+    // -----------------------------------------------------------------------
+    // Round t to 23 significant bits (away from zero) so t*t is exact
+    // -----------------------------------------------------------------------
+    let t_bits_r = _mm512_castpd_si512(t);
+    let rounded = _mm512_and_si512(
+        _mm512_add_epi64(t_bits_r, _mm512_set1_epi64(ROUND_BIAS_64 as i64)),
+        _mm512_set1_epi64(ROUND_MASK_64 as i64),
+    );
+    t = _mm512_castsi512_pd(rounded);
+
+    // -----------------------------------------------------------------------
+    // One Newton iteration to 53 bits: t += t * (x/t² - t) / (2t + x/t²)
+    // -----------------------------------------------------------------------
+    let s = _mm512_mul_pd(t, t);
+    let r = _mm512_div_pd(x, s);
+    let w = _mm512_add_pd(t, t);
+    t = _mm512_fmadd_pd(
+        t,
+        _mm512_div_pd(_mm512_sub_pd(r, t), _mm512_add_pd(w, r)),
+        t,
+    );
+
+    // -----------------------------------------------------------------------
+    // Blend in special cases
+    // -----------------------------------------------------------------------
+    // Zero: return x (preserves ±0)
+    t = _mm512_mask_blend_pd(is_zero, t, x);
+
+    // Inf/NaN: return x + x (propagates NaN, returns ±∞ for ±∞)
+    _mm512_mask_blend_pd(is_inf_nan, t, _mm512_add_pd(x, x))
 }
 
 // ===========================================================================

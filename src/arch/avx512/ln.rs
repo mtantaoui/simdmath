@@ -137,8 +137,7 @@ pub(crate) unsafe fn _mm512_ln_pd(x: __m512d) -> __m512d {
 #[inline]
 #[target_feature(enable = "avx512f")]
 unsafe fn ln_core_f64(x: __m512d) -> __m512d {
-    unsafe {
-        let zero = _mm512_setzero_pd();
+    let zero = _mm512_setzero_pd();
         let one = _mm512_set1_pd(1.0);
         let half = _mm512_set1_pd(0.5);
 
@@ -301,10 +300,7 @@ unsafe fn ln_core_f64(x: __m512d) -> __m512d {
         let result = _mm512_mask_blend_pd(is_negative, result, nan);
 
         // x is NaN → NaN (propagate)
-        let result = _mm512_mask_blend_pd(is_nan, result, nan);
-
-        result
-    }
+        _mm512_mask_blend_pd(is_nan, result, nan)
 }
 
 // =============================================================================

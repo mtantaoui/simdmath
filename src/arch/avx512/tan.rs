@@ -42,8 +42,8 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 
 use crate::arch::consts::tan::{
-    BIG_THRESH_64, FRAC_2_PI_32, FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_1T_64,
-    PIO2_2_64, PIO2_2T_64, PIO4_HI_64, PIO4_LO_64, T0_32, T0_64, T1_32, T1_64, T2_32, T2_64, T3_32,
+    BIG_THRESH_64, FRAC_2_PI_32, FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_2_64,
+    PIO2_2T_64, PIO4_HI_64, PIO4_LO_64, T0_32, T0_64, T1_32, T1_64, T2_32, T2_64, T3_32,
     T3_64, T4_32, T4_64, T5_32, T5_64, T6_64, T7_64, T8_64, T9_64, T10_64, T11_64, T12_64, TOINT,
 };
 
@@ -169,29 +169,27 @@ unsafe fn tan_ps_in_f64(x: __m512d) -> __m512d {
 #[inline]
 #[target_feature(enable = "avx512f")]
 unsafe fn tandf_kernel(x: __m512d) -> __m512d {
-    unsafe {
-        let t0 = _mm512_set1_pd(T0_32);
-        let t1 = _mm512_set1_pd(T1_32);
-        let t2 = _mm512_set1_pd(T2_32);
-        let t3 = _mm512_set1_pd(T3_32);
-        let t4 = _mm512_set1_pd(T4_32);
-        let t5 = _mm512_set1_pd(T5_32);
+    let t0 = _mm512_set1_pd(T0_32);
+    let t1 = _mm512_set1_pd(T1_32);
+    let t2 = _mm512_set1_pd(T2_32);
+    let t3 = _mm512_set1_pd(T3_32);
+    let t4 = _mm512_set1_pd(T4_32);
+    let t5 = _mm512_set1_pd(T5_32);
 
-        let z = _mm512_mul_pd(x, x); // z = x²
-        let w = _mm512_mul_pd(z, z); // w = z² = x⁴
+    let z = _mm512_mul_pd(x, x); // z = x²
+    let w = _mm512_mul_pd(z, z); // w = z² = x⁴
 
-        // Horner's method for polynomial evaluation
-        // r = T4 + z*T5
-        let r = _mm512_fmadd_pd(z, t5, t4);
-        // r = T2 + z*T3 + w*r = T2 + z*T3 + w*(T4 + z*T5)
-        let r = _mm512_fmadd_pd(w, r, _mm512_fmadd_pd(z, t3, t2));
-        // r = T0 + z*T1 + w*r
-        let r = _mm512_fmadd_pd(w, r, _mm512_fmadd_pd(z, t1, t0));
+    // Horner's method for polynomial evaluation
+    // r = T4 + z*T5
+    let r = _mm512_fmadd_pd(z, t5, t4);
+    // r = T2 + z*T3 + w*r = T2 + z*T3 + w*(T4 + z*T5)
+    let r = _mm512_fmadd_pd(w, r, _mm512_fmadd_pd(z, t3, t2));
+    // r = T0 + z*T1 + w*r
+    let r = _mm512_fmadd_pd(w, r, _mm512_fmadd_pd(z, t1, t0));
 
-        // tan(x) = x + x³ * r = x + z*x*r
-        let zx = _mm512_mul_pd(z, x); // z*x = x³
-        _mm512_fmadd_pd(zx, r, x) // x + x³*r
-    }
+    // tan(x) = x + x³ * r = x + z*x*r
+    let zx = _mm512_mul_pd(z, x); // z*x = x³
+    _mm512_fmadd_pd(zx, r, x) // x + x³*r
 }
 
 // =============================================================================
@@ -217,7 +215,6 @@ pub(crate) unsafe fn _mm512_tan_pd(x: __m512d) -> __m512d {
     unsafe {
         let frac_2_pi = _mm512_set1_pd(FRAC_2_PI_64);
         let pio2_1 = _mm512_set1_pd(PIO2_1_64);
-        let pio2_1t = _mm512_set1_pd(PIO2_1T_64);
         let pio2_2 = _mm512_set1_pd(PIO2_2_64);
         let pio2_2t = _mm512_set1_pd(PIO2_2T_64);
         let toint = _mm512_set1_pd(TOINT);
@@ -225,24 +222,20 @@ pub(crate) unsafe fn _mm512_tan_pd(x: __m512d) -> __m512d {
         // -------------------------------------------------------------------------
         // Step 1: Argument reduction with extended precision
         // -------------------------------------------------------------------------
+        // Uses musl's __rem_pio2 2nd-iteration approach unconditionally.
+        // Avoids catastrophic cancellation near multiples of π/2.
 
         let fn_val = _mm512_sub_pd(_mm512_fmadd_pd(x, frac_2_pi, toint), toint);
         let n = _mm512_cvtpd_epi32(fn_val);
 
-        // Extended precision Cody-Waite reduction
-        // y = x - fn*(pio2_1 + pio2_1t) with compensation
-        let mut y = _mm512_fnmadd_pd(fn_val, pio2_1, x);
-        y = _mm512_fnmadd_pd(fn_val, pio2_1t, y);
+        let r = _mm512_fnmadd_pd(fn_val, pio2_1, x);
+        let w = _mm512_mul_pd(fn_val, pio2_2);
+        let r2 = _mm512_sub_pd(r, w);
+        let excess = _mm512_sub_pd(_mm512_sub_pd(r, r2), w);
+        let tail = _mm512_sub_pd(_mm512_mul_pd(fn_val, pio2_2t), excess);
+        let y = _mm512_sub_pd(r2, tail);
 
-        // For very large arguments, apply additional correction terms
         let abs_x = _mm512_abs_pd(x);
-        let large_thresh = _mm512_set1_pd(1e9);
-        let is_large = _mm512_cmp_pd_mask(abs_x, large_thresh, _CMP_GT_OQ);
-
-        // Additional reduction for large values
-        let y_corrected = _mm512_fnmadd_pd(fn_val, pio2_2, y);
-        let y_corrected = _mm512_fnmadd_pd(fn_val, pio2_2t, y_corrected);
-        let y = _mm512_mask_blend_pd(is_large, y, y_corrected);
 
         // -------------------------------------------------------------------------
         // Step 2: Compute quadrant info (n mod 2)
