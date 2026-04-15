@@ -47,5 +47,20 @@ pub(crate) mod avx512;
 pub(crate) mod consts;
 #[cfg(target_arch = "aarch64")]
 pub(crate) mod neon;
+#[cfg(any(
+    all(
+        target_arch = "x86_64",
+        not(target_feature = "avx512f"),
+        not(target_feature = "avx2"),
+        not(target_feature = "sse4.1")
+    ),
+    not(any(target_arch = "x86_64", target_arch = "aarch64"))
+))]
 pub(crate) mod scalar;
+#[cfg(all(
+    target_arch = "x86_64",
+    not(target_feature = "avx512f"),
+    not(target_feature = "avx2"),
+    target_feature = "sse4.1"
+))]
 pub(crate) mod sse;

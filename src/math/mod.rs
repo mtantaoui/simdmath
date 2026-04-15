@@ -239,9 +239,6 @@ pub trait VecMath<T> {
     ///
     /// **≤ 2 ULP** error across the entire domain.
     ///
-    /// *Note*: The AVX2 backend achieves ≤ 1.5 ULP; AVX-512 and NEON achieve
-    /// ≤ 2 ULP. The trait-level bound is the worst-case across all backends.
-    ///
     /// # Special values
     ///
     /// - `sin(±0)` = `±0`

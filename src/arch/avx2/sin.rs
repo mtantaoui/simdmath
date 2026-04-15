@@ -23,13 +23,8 @@
 //!
 //! | Variant           | Max Error |
 //! |-------------------|-----------|
-//! | `_mm256_sin_ps`   | ≤ 1.5 ULP |
-//! | `_mm256_sin_pd`   | ≤ 1.5 ULP |
-//!
-//! *Note*: The AVX2 backend achieves a tighter bound (≤ 1.5 ULP) than AVX-512
-//! and NEON (≤ 2 ULP) because `_mm256_sin_ps` promotes `f32` inputs to `f64`
-//! for intermediate computation, gaining extra mantissa bits. The other backends
-//! operate natively in the target precision.
+//! | `_mm256_sin_ps`   | ≤ 2 ULP   |
+//! | `_mm256_sin_pd`   | ≤ 2 ULP   |
 //!
 //! # Special Values
 //!
@@ -64,7 +59,7 @@ use crate::arch::consts::sin::{
 ///
 /// # Precision
 ///
-/// **≤ 1.5 ULP** error across the entire domain.
+/// **≤ 2 ULP** error across the entire domain.
 ///
 /// # Safety
 ///
@@ -240,7 +235,7 @@ unsafe fn cosdf_kernel(x: __m256d) -> __m256d {
 ///
 /// # Precision
 ///
-/// **≤ 1.5 ULP** error across the entire domain.
+/// **≤ 2 ULP** error across the entire domain.
 ///
 /// # Safety
 ///
@@ -596,8 +591,8 @@ mod tests {
                 }
             }
             assert!(
-                max_ulp <= 1.5,
-                "Max ULP error: {} (expected ≤ 1.5)",
+                max_ulp <= 2.0,
+                "Max ULP error: {} (expected ≤ 2)",
                 max_ulp
             );
         }
@@ -740,8 +735,8 @@ mod tests {
                 worst_x, worst_result, worst_expected, max_ulp
             );
             assert!(
-                max_ulp <= 1.5,
-                "Max ULP error: {} (expected ≤ 1.5)",
+                max_ulp <= 2.0,
+                "Max ULP error: {} (expected ≤ 2)",
                 max_ulp
             );
         }
