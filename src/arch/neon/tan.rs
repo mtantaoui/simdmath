@@ -34,7 +34,7 @@
 //! | `±∞`        | `NaN`  |
 //! | `NaN`       | `NaN`  |
 //! | Very small  | `x` (correctly rounded) |
-//! | `±π/2`      | Large value (approaches ±∞) |
+//! | `±π/2`      | Large finite value (π/2 is not exactly representable in IEEE 754, so the true singularity is never reached) |
 
 use std::arch::aarch64::*;
 
