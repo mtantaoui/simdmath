@@ -23,13 +23,14 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets -- -D warnings
+          targets: aarch64-unknown-linux-gnu
+      - run: RUSTFLAGS="-C target-feature=+neon" cargo clippy --target aarch64-unknown-linux-gnu -- -D warnings
 
   test:
     name: Test

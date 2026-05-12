@@ -41,4 +41,4 @@ jobs:
       # so executing the test binary would SIGILL. We compile-only here; once a
       # self-hosted AVX-512 runner or Intel SDE integration is available, switch
       # to a real `cargo test` job.
-      - run: cargo test --no-run
+      - run: RUSTFLAGS="-C target-feature=+avx512f,+avx512vl" cargo test --no-run --target x86_64-unknown-linux-gnu

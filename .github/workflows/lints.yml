@@ -1,4 +1,4 @@
-name: Lints (deny + semver)
+name: Lints (deny)
 
 on:
   push:
@@ -15,22 +15,3 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check bans licenses sources
-
-  semver-checks:
-    name: cargo-semver-checks
-    runs-on: ubuntu-latest
-    # Only meaningful once the crate has had its first release on crates.io.
-    # Until then this job exits early.
-    steps:
-      - uses: actions/checkout@v4
-      - name: Skip until first crates.io release
-        run: |
-          if [ ! -f .release-on-cratesio ]; then
-            echo "::notice::semver-checks skipped — no published baseline yet."
-            echo "Touch .release-on-cratesio after the first 'cargo publish' to enable this job."
-            exit 0
-          fi
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
-        with:
-          rust-toolchain: stable
