@@ -18,7 +18,9 @@ fn bench_sum_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.sum())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_sum::<f32>(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_sum::<f32>(black_box(&a))))
+        });
         g.finish();
     }
 }
@@ -29,7 +31,9 @@ fn bench_sum_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.sum())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_sum::<f64>(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_sum::<f64>(black_box(&a))))
+        });
         g.finish();
     }
 }
@@ -44,7 +48,9 @@ fn bench_product_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.product())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_product::<f32>(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_product::<f32>(black_box(&a))))
+        });
         g.finish();
     }
 }
@@ -55,7 +61,9 @@ fn bench_product_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.product())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_product::<f64>(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_product::<f64>(black_box(&a))))
+        });
         g.finish();
     }
 }
@@ -70,7 +78,9 @@ fn bench_min_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.min())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_min(black_box(&a), f32::INFINITY))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_min(black_box(&a), f32::INFINITY)))
+        });
         g.finish();
     }
 }
@@ -81,7 +91,9 @@ fn bench_min_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.min())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_min(black_box(&a), f64::INFINITY))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_min(black_box(&a), f64::INFINITY)))
+        });
         g.finish();
     }
 }
@@ -96,7 +108,9 @@ fn bench_max_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.max())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_max(black_box(&a), f32::NEG_INFINITY))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_max(black_box(&a), f32::NEG_INFINITY)))
+        });
         g.finish();
     }
 }
@@ -107,7 +121,9 @@ fn bench_max_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, _) = make_vecs_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.max())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_max(black_box(&a), f64::NEG_INFINITY))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_max(black_box(&a), f64::NEG_INFINITY)))
+        });
         g.finish();
     }
 }

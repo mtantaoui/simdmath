@@ -14,7 +14,9 @@ fn bench_sub_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, b) = make_vecs_f32(n);
         g.bench_function("simd", |b_| b_.iter(|| black_box(a.sub(black_box(&b)))));
-        g.bench_function("scalar", |b_| b_.iter(|| black_box(scalar_sub(black_box(&a), black_box(&b)))));
+        g.bench_function("scalar", |b_| {
+            b_.iter(|| black_box(scalar_sub(black_box(&a), black_box(&b))))
+        });
         g.finish();
     }
 }
@@ -25,7 +27,9 @@ fn bench_sub_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (a, b) = make_vecs_f64(n);
         g.bench_function("simd", |b_| b_.iter(|| black_box(a.sub(black_box(&b)))));
-        g.bench_function("scalar", |b_| b_.iter(|| black_box(scalar_sub(black_box(&a), black_box(&b)))));
+        g.bench_function("scalar", |b_| {
+            b_.iter(|| black_box(scalar_sub(black_box(&a), black_box(&b))))
+        });
         g.finish();
     }
 }

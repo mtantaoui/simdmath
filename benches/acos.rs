@@ -32,7 +32,9 @@ fn bench_acos_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let a = make_acos_input_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.acos())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_acos_f32(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_acos_f32(black_box(&a))))
+        });
         g.finish();
     }
 }
@@ -43,7 +45,9 @@ fn bench_acos_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let a = make_acos_input_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.acos())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_acos_f64(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_acos_f64(black_box(&a))))
+        });
         g.finish();
     }
 }

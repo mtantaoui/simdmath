@@ -331,6 +331,11 @@ use crate::ops::simd::{Load, Store};
 
 /// Applies `op` element-wise to `lhs` and `rhs`, writing results into a freshly
 /// allocated `Vec`. Caller must guarantee `lhs.len() == rhs.len()`.
+#[cfg(any(
+    all(target_arch = "x86_64", target_feature = "avx2"),
+    all(target_arch = "x86_64", target_feature = "avx512f"),
+    all(target_arch = "aarch64", target_feature = "neon"),
+))]
 #[inline]
 pub(crate) fn binary_op<T, S>(
     lhs: &[T],
@@ -380,6 +385,11 @@ where
 /// for the tail chunk `op(a, scalar)` produces a result whose `size = a.size`
 /// (since arithmetic always takes `size` from `self`), so `store_at_partial`
 /// uses the correct mask automatically.
+#[cfg(any(
+    all(target_arch = "x86_64", target_feature = "avx2"),
+    all(target_arch = "x86_64", target_feature = "avx512f"),
+    all(target_arch = "aarch64", target_feature = "neon"),
+))]
 #[inline]
 pub(crate) fn scalar_op<T, S>(
     lhs: &[T],
@@ -428,6 +438,11 @@ where
 
 /// In-place element-wise `op`: `lhs[i] = op(lhs[i], rhs[i])`.
 /// Caller must guarantee `lhs.len() == rhs.len()`.
+#[cfg(any(
+    all(target_arch = "x86_64", target_feature = "avx2"),
+    all(target_arch = "x86_64", target_feature = "avx512f"),
+    all(target_arch = "aarch64", target_feature = "neon"),
+))]
 #[inline]
 pub(crate) fn binary_op_inplace<T, S>(
     lhs: &mut [T],
@@ -465,6 +480,11 @@ pub(crate) fn binary_op_inplace<T, S>(
 }
 
 /// In-place scalar `op`: `lhs[i] = op(lhs[i], rhs)`.
+#[cfg(any(
+    all(target_arch = "x86_64", target_feature = "avx2"),
+    all(target_arch = "x86_64", target_feature = "avx512f"),
+    all(target_arch = "aarch64", target_feature = "neon"),
+))]
 #[inline]
 pub(crate) fn scalar_op_inplace<T, S>(
     lhs: &mut [T],
@@ -504,6 +524,11 @@ pub(crate) fn scalar_op_inplace<T, S>(
 
 /// Applies a unary `op` element-wise to `lhs`, writing results into a freshly
 /// allocated `Vec`. Used for operations like `abs` that take a single operand.
+#[cfg(any(
+    all(target_arch = "x86_64", target_feature = "avx2"),
+    all(target_arch = "x86_64", target_feature = "avx512f"),
+    all(target_arch = "aarch64", target_feature = "neon"),
+))]
 #[inline]
 pub(crate) fn unary_op<T, S>(lhs: &[T], lane_count: usize, op: impl Fn(S) -> S) -> Vec<T>
 where

@@ -77,20 +77,22 @@ use crate::arch::consts::ln::{
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
 pub(crate) unsafe fn vln_f32(x: float32x4_t) -> float32x4_t {
-    // Process as two 2-lane f64 operations for precision
-    // Split input into low and high halves, convert to f64
-    let x_lo = vcvt_f64_f32(vget_low_f32(x));
-    let x_hi = vcvt_f64_f32(vget_high_f32(x));
+    unsafe {
+        // Process as two 2-lane f64 operations for precision
+        // Split input into low and high halves, convert to f64
+        let x_lo = vcvt_f64_f32(vget_low_f32(x));
+        let x_hi = vcvt_f64_f32(vget_high_f32(x));
 
-    // Compute ln in f64 precision for each half
-    let ln_lo = ln_core_f64(x_lo);
-    let ln_hi = ln_core_f64(x_hi);
+        // Compute ln in f64 precision for each half
+        let ln_lo = ln_core_f64(x_lo);
+        let ln_hi = ln_core_f64(x_hi);
 
-    // Convert back to f32 and combine
-    let result_lo = vcvt_f32_f64(ln_lo);
-    let result_hi = vcvt_f32_f64(ln_hi);
+        // Convert back to f32 and combine
+        let result_lo = vcvt_f32_f64(ln_lo);
+        let result_hi = vcvt_f32_f64(ln_hi);
 
-    vcombine_f32(result_lo, result_hi)
+        vcombine_f32(result_lo, result_hi)
+    }
 }
 
 // =============================================================================
@@ -111,7 +113,7 @@ pub(crate) unsafe fn vln_f32(x: float32x4_t) -> float32x4_t {
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
 pub(crate) unsafe fn vln_f64(x: float64x2_t) -> float64x2_t {
-    ln_core_f64(x)
+    unsafe { ln_core_f64(x) }
 }
 
 // =============================================================================
@@ -127,173 +129,175 @@ pub(crate) unsafe fn vln_f64(x: float64x2_t) -> float64x2_t {
 /// 4. Reconstruct: `result = k*ln2_hi - ((hfsq - (s*(hfsq+R) + k*ln2_lo)) - f)`
 #[inline]
 unsafe fn ln_core_f64(x: float64x2_t) -> float64x2_t {
-    let zero = vdupq_n_f64(0.0);
-    let one = vdupq_n_f64(1.0);
-    let half = vdupq_n_f64(0.5);
+    unsafe {
+        let zero = vdupq_n_f64(0.0);
+        let one = vdupq_n_f64(1.0);
+        let half = vdupq_n_f64(0.5);
 
-    // =====================================================================
-    // Step 0: Special case detection (save for later)
-    // =====================================================================
+        // =====================================================================
+        // Step 0: Special case detection (save for later)
+        // =====================================================================
 
-    let abs_x = vabsq_f64(x);
-    let inf = vdupq_n_f64(f64::INFINITY);
+        let abs_x = vabsq_f64(x);
+        let inf = vdupq_n_f64(f64::INFINITY);
 
-    // x < 0 (excluding -0) → NaN
-    let is_negative = vcltq_f64(x, zero);
+        // x < 0 (excluding -0) → NaN
+        let is_negative = vcltq_f64(x, zero);
 
-    // x == 0 or x == -0 → -∞
-    let is_zero = vceqq_f64(abs_x, zero);
+        // x == 0 or x == -0 → -∞
+        let is_zero = vceqq_f64(abs_x, zero);
 
-    // x == +∞ → +∞
-    let is_pos_inf = vceqq_f64(x, inf);
+        // x == +∞ → +∞
+        let is_pos_inf = vceqq_f64(x, inf);
 
-    // x is NaN → NaN (NaN != NaN)
-    let is_not_nan = vceqq_f64(x, x);
-    let all_ones = vreinterpretq_u64_s64(vdupq_n_s64(-1));
-    let is_nan = veorq_u64(is_not_nan, all_ones);
+        // x is NaN → NaN (NaN != NaN)
+        let is_not_nan = vceqq_f64(x, x);
+        let all_ones = vreinterpretq_u64_s64(vdupq_n_s64(-1));
+        let is_nan = veorq_u64(is_not_nan, all_ones);
 
-    // =====================================================================
-    // Step 1: Handle subnormals by scaling up
-    // =====================================================================
+        // =====================================================================
+        // Step 1: Handle subnormals by scaling up
+        // =====================================================================
 
-    // Subnormal: 0 < |x| < 2^-1022 (smallest normal)
-    let min_normal = vdupq_n_f64(f64::MIN_POSITIVE); // 2^-1022
-    let is_subnormal = vandq_u64(vcgtq_f64(abs_x, zero), vcltq_f64(abs_x, min_normal));
+        // Subnormal: 0 < |x| < 2^-1022 (smallest normal)
+        let min_normal = vdupq_n_f64(f64::MIN_POSITIVE); // 2^-1022
+        let is_subnormal = vandq_u64(vcgtq_f64(abs_x, zero), vcltq_f64(abs_x, min_normal));
 
-    // Scale subnormals by 2^52 to make them normal
-    let two52 = vdupq_n_f64(TWO52_64);
-    let x_scaled = vmulq_f64(x, two52);
-    let x_work = vbslq_f64(is_subnormal, x_scaled, x);
+        // Scale subnormals by 2^52 to make them normal
+        let two52 = vdupq_n_f64(TWO52_64);
+        let x_scaled = vmulq_f64(x, two52);
+        let x_work = vbslq_f64(is_subnormal, x_scaled, x);
 
-    // Subnormal exponent adjustment: subtract 52 from k later
-    let neg_52 = vdupq_n_f64(-52.0);
-    let k_adjust = vbslq_f64(is_subnormal, neg_52, zero);
+        // Subnormal exponent adjustment: subtract 52 from k later
+        let neg_52 = vdupq_n_f64(-52.0);
+        let k_adjust = vbslq_f64(is_subnormal, neg_52, zero);
 
-    // =====================================================================
-    // Step 2: Extract exponent k and normalize mantissa
-    // =====================================================================
+        // =====================================================================
+        // Step 2: Extract exponent k and normalize mantissa
+        // =====================================================================
 
-    // Get IEEE 754 bit pattern
-    let ix = vreinterpretq_s64_f64(x_work);
+        // Get IEEE 754 bit pattern
+        let ix = vreinterpretq_s64_f64(x_work);
 
-    // Extract biased exponent: bits [52:62] → shift right 52
-    let exp_bits = vshrq_n_s64::<52>(ix);
+        // Extract biased exponent: bits [52:62] → shift right 52
+        let exp_bits = vshrq_n_s64::<52>(ix);
 
-    // Convert to f64: k = biased_exponent - 1023
-    let bias = vdupq_n_f64(1023.0);
-    let k = vsubq_f64(vcvtq_f64_s64(exp_bits), bias);
+        // Convert to f64: k = biased_exponent - 1023
+        let bias = vdupq_n_f64(1023.0);
+        let k = vsubq_f64(vcvtq_f64_s64(exp_bits), bias);
 
-    // Apply subnormal adjustment
-    let k = vaddq_f64(k, k_adjust);
+        // Apply subnormal adjustment
+        let k = vaddq_f64(k, k_adjust);
 
-    // Normalize mantissa: clear exponent bits, set exponent to 1023 (range [1, 2))
-    let mantissa_mask = vdupq_n_s64(0x000FFFFFFFFFFFFF_u64 as i64);
-    let exp_1023 = vdupq_n_s64(0x3FF0000000000000_u64 as i64);
-    let m_bits = vorrq_s64(vandq_s64(ix, mantissa_mask), exp_1023);
-    let m = vreinterpretq_f64_s64(m_bits);
+        // Normalize mantissa: clear exponent bits, set exponent to 1023 (range [1, 2))
+        let mantissa_mask = vdupq_n_s64(0x000FFFFFFFFFFFFF_u64 as i64);
+        let exp_1023 = vdupq_n_s64(0x3FF0000000000000_u64 as i64);
+        let m_bits = vorrq_s64(vandq_s64(ix, mantissa_mask), exp_1023);
+        let m = vreinterpretq_f64_s64(m_bits);
 
-    // If m > √2, halve it (set exponent to 1022 → range [0.5, 1)) and increment k
-    let sqrt2 = vdupq_n_f64(SQRT2_64);
-    let is_big = vcgtq_f64(m, sqrt2);
+        // If m > √2, halve it (set exponent to 1022 → range [0.5, 1)) and increment k
+        let sqrt2 = vdupq_n_f64(SQRT2_64);
+        let is_big = vcgtq_f64(m, sqrt2);
 
-    // For big m: divide by 2 (subtract 1 from exponent field)
-    let exp_1022 = vdupq_n_s64(0x3FE0000000000000_u64 as i64);
-    let m_halved_bits = vorrq_s64(vandq_s64(ix, mantissa_mask), exp_1022);
-    let m_halved = vreinterpretq_f64_s64(m_halved_bits);
+        // For big m: divide by 2 (subtract 1 from exponent field)
+        let exp_1022 = vdupq_n_s64(0x3FE0000000000000_u64 as i64);
+        let m_halved_bits = vorrq_s64(vandq_s64(ix, mantissa_mask), exp_1022);
+        let m_halved = vreinterpretq_f64_s64(m_halved_bits);
 
-    let m = vbslq_f64(is_big, m_halved, m);
-    let k_inc = vbslq_f64(is_big, one, zero);
-    let k = vaddq_f64(k, k_inc); // k++ if big
+        let m = vbslq_f64(is_big, m_halved, m);
+        let k_inc = vbslq_f64(is_big, one, zero);
+        let k = vaddq_f64(k, k_inc); // k++ if big
 
-    // =====================================================================
-    // Step 3: Compute f = m - 1, s = f / (2 + f)
-    // =====================================================================
+        // =====================================================================
+        // Step 3: Compute f = m - 1, s = f / (2 + f)
+        // =====================================================================
 
-    let f = vsubq_f64(m, one);
-    let two_plus_f = vaddq_f64(vdupq_n_f64(2.0), f);
-    let s = vdivq_f64(f, two_plus_f);
+        let f = vsubq_f64(m, one);
+        let two_plus_f = vaddq_f64(vdupq_n_f64(2.0), f);
+        let s = vdivq_f64(f, two_plus_f);
 
-    // hfsq = 0.5 * f * f
-    let hfsq = vmulq_f64(half, vmulq_f64(f, f));
+        // hfsq = 0.5 * f * f
+        let hfsq = vmulq_f64(half, vmulq_f64(f, f));
 
-    // =====================================================================
-    // Step 4: Evaluate minimax polynomial R(z) where z = s²
-    // =====================================================================
+        // =====================================================================
+        // Step 4: Evaluate minimax polynomial R(z) where z = s²
+        // =====================================================================
 
-    let z = vmulq_f64(s, s); // z = s²
-    let w = vmulq_f64(z, z); // w = s⁴
+        let z = vmulq_f64(s, s); // z = s²
+        let w = vmulq_f64(z, z); // w = s⁴
 
-    // Split into odd and even powers for better ILP (instruction-level parallelism)
-    // Odd terms:  t1 = Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
-    // Even terms: t2 = Lg2 + w*(Lg4 + w*Lg6)
-    let lg1 = vdupq_n_f64(LG1_64);
-    let lg2 = vdupq_n_f64(LG2_64);
-    let lg3 = vdupq_n_f64(LG3_64);
-    let lg4 = vdupq_n_f64(LG4_64);
-    let lg5 = vdupq_n_f64(LG5_64);
-    let lg6 = vdupq_n_f64(LG6_64);
-    let lg7 = vdupq_n_f64(LG7_64);
+        // Split into odd and even powers for better ILP (instruction-level parallelism)
+        // Odd terms:  t1 = Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
+        // Even terms: t2 = Lg2 + w*(Lg4 + w*Lg6)
+        let lg1 = vdupq_n_f64(LG1_64);
+        let lg2 = vdupq_n_f64(LG2_64);
+        let lg3 = vdupq_n_f64(LG3_64);
+        let lg4 = vdupq_n_f64(LG4_64);
+        let lg5 = vdupq_n_f64(LG5_64);
+        let lg6 = vdupq_n_f64(LG6_64);
+        let lg7 = vdupq_n_f64(LG7_64);
 
-    // t1 = Lg1 + w * (Lg3 + w * (Lg5 + w * Lg7))
-    let t1 = vfmaq_f64(lg5, w, lg7); // Lg5 + w*Lg7
-    let t1 = vfmaq_f64(lg3, w, t1); // Lg3 + w*(Lg5 + w*Lg7)
-    let t1 = vfmaq_f64(lg1, w, t1); // Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
+        // t1 = Lg1 + w * (Lg3 + w * (Lg5 + w * Lg7))
+        let t1 = vfmaq_f64(lg5, w, lg7); // Lg5 + w*Lg7
+        let t1 = vfmaq_f64(lg3, w, t1); // Lg3 + w*(Lg5 + w*Lg7)
+        let t1 = vfmaq_f64(lg1, w, t1); // Lg1 + w*(Lg3 + w*(Lg5 + w*Lg7))
 
-    // t2 = Lg2 + w * (Lg4 + w * Lg6)
-    let t2 = vfmaq_f64(lg4, w, lg6); // Lg4 + w*Lg6
-    let t2 = vfmaq_f64(lg2, w, t2); // Lg2 + w*(Lg4 + w*Lg6)
+        // t2 = Lg2 + w * (Lg4 + w * Lg6)
+        let t2 = vfmaq_f64(lg4, w, lg6); // Lg4 + w*Lg6
+        let t2 = vfmaq_f64(lg2, w, t2); // Lg2 + w*(Lg4 + w*Lg6)
 
-    // R = z*(t1 + z*t2)
-    let r = vfmaq_f64(t1, z, t2); // t1 + z*t2
-    let r = vmulq_f64(z, r); // z*(t1 + z*t2)
+        // R = z*(t1 + z*t2)
+        let r = vfmaq_f64(t1, z, t2); // t1 + z*t2
+        let r = vmulq_f64(z, r); // z*(t1 + z*t2)
 
-    // =====================================================================
-    // Step 5: Reconstruct ln(x) = k*ln2_hi - ((hfsq - (s*(hfsq+R) + k*ln2_lo)) - f)
-    // =====================================================================
+        // =====================================================================
+        // Step 5: Reconstruct ln(x) = k*ln2_hi - ((hfsq - (s*(hfsq+R) + k*ln2_lo)) - f)
+        // =====================================================================
 
-    let ln2_hi = vdupq_n_f64(LN2_HI_64);
-    let ln2_lo = vdupq_n_f64(LN2_LO_64);
+        let ln2_hi = vdupq_n_f64(LN2_HI_64);
+        let ln2_lo = vdupq_n_f64(LN2_LO_64);
 
-    // s * (hfsq + R)
-    let s_term = vmulq_f64(s, vaddq_f64(hfsq, r));
+        // s * (hfsq + R)
+        let s_term = vmulq_f64(s, vaddq_f64(hfsq, r));
 
-    // k * ln2_lo
-    let k_ln2_lo = vmulq_f64(k, ln2_lo);
+        // k * ln2_lo
+        let k_ln2_lo = vmulq_f64(k, ln2_lo);
 
-    // inner = s*(hfsq+R) + k*ln2_lo
-    let inner = vaddq_f64(s_term, k_ln2_lo);
+        // inner = s*(hfsq+R) + k*ln2_lo
+        let inner = vaddq_f64(s_term, k_ln2_lo);
 
-    // hfsq - inner
-    let hfsq_minus_inner = vsubq_f64(hfsq, inner);
+        // hfsq - inner
+        let hfsq_minus_inner = vsubq_f64(hfsq, inner);
 
-    // (hfsq - inner) - f  →  this is the negative of the log(1+f) part
-    let log_part = vsubq_f64(hfsq_minus_inner, f);
+        // (hfsq - inner) - f  →  this is the negative of the log(1+f) part
+        let log_part = vsubq_f64(hfsq_minus_inner, f);
 
-    // result = k*ln2_hi - log_part
-    // vfmsq_f64(c, a, b) = c - a*b, but we want k*ln2_hi - log_part
-    // = fma(k, ln2_hi, -log_part) = -log_part + k*ln2_hi
-    let result = vfmaq_f64(vnegq_f64(log_part), k, ln2_hi);
+        // result = k*ln2_hi - log_part
+        // vfmsq_f64(c, a, b) = c - a*b, but we want k*ln2_hi - log_part
+        // = fma(k, ln2_hi, -log_part) = -log_part + k*ln2_hi
+        let result = vfmaq_f64(vnegq_f64(log_part), k, ln2_hi);
 
-    // =====================================================================
-    // Step 6: Apply special cases
-    // =====================================================================
+        // =====================================================================
+        // Step 6: Apply special cases
+        // =====================================================================
 
-    let nan = vdupq_n_f64(f64::NAN);
-    let neg_inf = vdupq_n_f64(f64::NEG_INFINITY);
+        let nan = vdupq_n_f64(f64::NAN);
+        let neg_inf = vdupq_n_f64(f64::NEG_INFINITY);
 
-    // x == 0 or x == -0 → -∞
-    let result = vbslq_f64(is_zero, neg_inf, result);
+        // x == 0 or x == -0 → -∞
+        let result = vbslq_f64(is_zero, neg_inf, result);
 
-    // x == +∞ → +∞
-    let result = vbslq_f64(is_pos_inf, inf, result);
+        // x == +∞ → +∞
+        let result = vbslq_f64(is_pos_inf, inf, result);
 
-    // x < 0 → NaN
-    let result = vbslq_f64(is_negative, nan, result);
+        // x < 0 → NaN
+        let result = vbslq_f64(is_negative, nan, result);
 
-    // x is NaN → NaN (propagate)
-    let result = vbslq_f64(is_nan, nan, result);
+        // x is NaN → NaN (propagate)
+        let result = vbslq_f64(is_nan, nan, result);
 
-    result
+        result
+    }
 }
 
 // =============================================================================

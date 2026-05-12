@@ -60,7 +60,9 @@ fn bench_atan2_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (y, x) = make_atan2_inputs_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(y.atan2(black_box(&x)))));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_atan2_f32(black_box(&y), black_box(&x)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_atan2_f32(black_box(&y), black_box(&x))))
+        });
         g.finish();
     }
 }
@@ -71,7 +73,9 @@ fn bench_atan2_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let (y, x) = make_atan2_inputs_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(y.atan2(black_box(&x)))));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_atan2_f64(black_box(&y), black_box(&x)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_atan2_f64(black_box(&y), black_box(&x))))
+        });
         g.finish();
     }
 }

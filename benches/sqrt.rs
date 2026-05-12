@@ -30,7 +30,9 @@ fn bench_sqrt_f32(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let a = make_sqrt_inputs_f32(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.sqrt())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_sqrt_f32(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_sqrt_f32(black_box(&a))))
+        });
         g.finish();
     }
 }
@@ -41,7 +43,9 @@ fn bench_sqrt_f64(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         let a = make_sqrt_inputs_f64(n);
         g.bench_function("simd", |b| b.iter(|| black_box(a.sqrt())));
-        g.bench_function("scalar", |b| b.iter(|| black_box(scalar_sqrt_f64(black_box(&a)))));
+        g.bench_function("scalar", |b| {
+            b.iter(|| black_box(scalar_sqrt_f64(black_box(&a))))
+        });
         g.finish();
     }
 }

@@ -63,20 +63,22 @@ use crate::arch::consts::sin::{
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
 pub(crate) unsafe fn vsin_f32(x: float32x4_t) -> float32x4_t {
-    // Process as two 2-lane f64 operations for precision
-    // Split input into low and high halves, convert to f64
-    let x_lo = vcvt_f64_f32(vget_low_f32(x));
-    let x_hi = vcvt_f64_f32(vget_high_f32(x));
+    unsafe {
+        // Process as two 2-lane f64 operations for precision
+        // Split input into low and high halves, convert to f64
+        let x_lo = vcvt_f64_f32(vget_low_f32(x));
+        let x_hi = vcvt_f64_f32(vget_high_f32(x));
 
-    // Compute sine in f64 precision for each half
-    let sin_lo = sin_ps_in_f64(x_lo);
-    let sin_hi = sin_ps_in_f64(x_hi);
+        // Compute sine in f64 precision for each half
+        let sin_lo = sin_ps_in_f64(x_lo);
+        let sin_hi = sin_ps_in_f64(x_hi);
 
-    // Convert back to f32 and combine
-    let result_lo = vcvt_f32_f64(sin_lo);
-    let result_hi = vcvt_f32_f64(sin_hi);
+        // Convert back to f32 and combine
+        let result_lo = vcvt_f32_f64(sin_lo);
+        let result_hi = vcvt_f32_f64(sin_hi);
 
-    vcombine_f32(result_lo, result_hi)
+        vcombine_f32(result_lo, result_hi)
+    }
 }
 
 /// Internal f64 computation for f32 sine (2 lanes).
@@ -85,78 +87,80 @@ pub(crate) unsafe fn vsin_f32(x: float32x4_t) -> float32x4_t {
 /// been promoted to f64. The extra precision ensures ≤2 ULP in the final f32.
 #[inline]
 unsafe fn sin_ps_in_f64(x: float64x2_t) -> float64x2_t {
-    let frac_2_pi = vdupq_n_f64(FRAC_2_PI_32);
-    let pio2_1 = vdupq_n_f64(PIO2_1_32);
-    let pio2_1t = vdupq_n_f64(PIO2_1T_32);
-    let toint = vdupq_n_f64(TOINT);
+    unsafe {
+        let frac_2_pi = vdupq_n_f64(FRAC_2_PI_32);
+        let pio2_1 = vdupq_n_f64(PIO2_1_32);
+        let pio2_1t = vdupq_n_f64(PIO2_1T_32);
+        let toint = vdupq_n_f64(TOINT);
 
-    // -------------------------------------------------------------------------
-    // Step 1: Argument reduction
-    // Compute n = round(x * 2/π), then y = x - n * (π/2)
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 1: Argument reduction
+        // Compute n = round(x * 2/π), then y = x - n * (π/2)
+        // -------------------------------------------------------------------------
 
-    // fn = round(x * 2/π) using magic number trick
-    let fn_val = vsubq_f64(vfmaq_f64(toint, x, frac_2_pi), toint);
+        // fn = round(x * 2/π) using magic number trick
+        let fn_val = vsubq_f64(vfmaq_f64(toint, x, frac_2_pi), toint);
 
-    // Convert to integer for quadrant selection
-    let n = vcvtq_s64_f64(fn_val);
+        // Convert to integer for quadrant selection
+        let n = vcvtq_s64_f64(fn_val);
 
-    // Cody-Waite reduction: y = x - fn * pio2_1 - fn * pio2_1t
-    let y = vfmsq_f64(vfmsq_f64(x, fn_val, pio2_1), fn_val, pio2_1t);
+        // Cody-Waite reduction: y = x - fn * pio2_1 - fn * pio2_1t
+        let y = vfmsq_f64(vfmsq_f64(x, fn_val, pio2_1), fn_val, pio2_1t);
 
-    // -------------------------------------------------------------------------
-    // Step 2: Compute both sin(y) and cos(y) kernels
-    // We need both because quadrant determines which to use
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 2: Compute both sin(y) and cos(y) kernels
+        // We need both because quadrant determines which to use
+        // -------------------------------------------------------------------------
 
-    let sin_y = sindf_kernel(y);
-    let cos_y = cosdf_kernel(y);
+        let sin_y = sindf_kernel(y);
+        let cos_y = cosdf_kernel(y);
 
-    // -------------------------------------------------------------------------
-    // Step 3: Quadrant-based selection
-    // n mod 4: 0 → sin(y), 1 → cos(y), 2 → -sin(y), 3 → -cos(y)
-    //
-    // use_cos when n & 1 = 1 (n=1,3)
-    // negate when n & 2 = 2 (n=2,3)
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 3: Quadrant-based selection
+        // n mod 4: 0 → sin(y), 1 → cos(y), 2 → -sin(y), 3 → -cos(y)
+        //
+        // use_cos when n & 1 = 1 (n=1,3)
+        // negate when n & 2 = 2 (n=2,3)
+        // -------------------------------------------------------------------------
 
-    let one = vdupq_n_s64(1);
-    let two = vdupq_n_s64(2);
+        let one = vdupq_n_s64(1);
+        let two = vdupq_n_s64(2);
 
-    // Masks for quadrant selection
-    let n_and_1 = vandq_s64(n, one); // bit 0: use cos kernel
-    let n_and_2 = vandq_s64(n, two); // bit 1: negate
+        // Masks for quadrant selection
+        let n_and_1 = vandq_s64(n, one); // bit 0: use cos kernel
+        let n_and_2 = vandq_s64(n, two); // bit 1: negate
 
-    let use_cos = vceqq_s64(n_and_1, one);
-    let negate = vceqq_s64(n_and_2, two);
+        let use_cos = vceqq_s64(n_and_1, one);
+        let negate = vceqq_s64(n_and_2, two);
 
-    // Select sin or cos kernel using vbslq (mask, true_val, false_val)
-    let kernel_result = vbslq_f64(use_cos, cos_y, sin_y);
+        // Select sin or cos kernel using vbslq (mask, true_val, false_val)
+        let kernel_result = vbslq_f64(use_cos, cos_y, sin_y);
 
-    // Apply negation for quadrants 2 and 3
-    let sign_bit = vdupq_n_f64(-0.0);
-    let negated = vreinterpretq_f64_u64(veorq_u64(
-        vreinterpretq_u64_f64(kernel_result),
-        vreinterpretq_u64_f64(sign_bit),
-    ));
-    let result = vbslq_f64(negate, negated, kernel_result);
+        // Apply negation for quadrants 2 and 3
+        let sign_bit = vdupq_n_f64(-0.0);
+        let negated = vreinterpretq_f64_u64(veorq_u64(
+            vreinterpretq_u64_f64(kernel_result),
+            vreinterpretq_u64_f64(sign_bit),
+        ));
+        let result = vbslq_f64(negate, negated, kernel_result);
 
-    // -------------------------------------------------------------------------
-    // Step 4: Handle special cases (NaN, Inf, tiny values)
-    // sin(±∞) = NaN, sin(NaN) = NaN, sin(±0) = ±0
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 4: Handle special cases (NaN, Inf, tiny values)
+        // sin(±∞) = NaN, sin(NaN) = NaN, sin(±0) = ±0
+        // -------------------------------------------------------------------------
 
-    let abs_x = vabsq_f64(x);
-    let inf = vdupq_n_f64(f64::INFINITY);
-    let is_inf_or_nan = vcgeq_f64(abs_x, inf);
-    let nan = vdupq_n_f64(f64::NAN);
+        let abs_x = vabsq_f64(x);
+        let inf = vdupq_n_f64(f64::INFINITY);
+        let is_inf_or_nan = vcgeq_f64(abs_x, inf);
+        let nan = vdupq_n_f64(f64::NAN);
 
-    // For tiny values (including ±0), sin(x) ≈ x
-    let tiny = vdupq_n_f64(1e-300);
-    let is_tiny = vcltq_f64(abs_x, tiny);
-    let result = vbslq_f64(is_tiny, x, result);
+        // For tiny values (including ±0), sin(x) ≈ x
+        let tiny = vdupq_n_f64(1e-300);
+        let is_tiny = vcltq_f64(abs_x, tiny);
+        let result = vbslq_f64(is_tiny, x, result);
 
-    vbslq_f64(is_inf_or_nan, nan, result)
+        vbslq_f64(is_inf_or_nan, nan, result)
+    }
 }
 
 /// Sine kernel for reduced argument in `[-π/4, π/4]`.
@@ -164,23 +168,25 @@ unsafe fn sin_ps_in_f64(x: float64x2_t) -> float64x2_t {
 /// Implements musl's `__sindf`: sin(x) ≈ x + S1*x³ + S2*x⁵ + S3*x⁷ + S4*x⁹
 #[inline]
 unsafe fn sindf_kernel(x: float64x2_t) -> float64x2_t {
-    let s1 = vdupq_n_f64(S1_32);
-    let s2 = vdupq_n_f64(S2_32);
-    let s3 = vdupq_n_f64(S3_32);
-    let s4 = vdupq_n_f64(S4_32);
+    unsafe {
+        let s1 = vdupq_n_f64(S1_32);
+        let s2 = vdupq_n_f64(S2_32);
+        let s3 = vdupq_n_f64(S3_32);
+        let s4 = vdupq_n_f64(S4_32);
 
-    let z = vmulq_f64(x, x); // z = x²
-    let w = vmulq_f64(z, z); // w = z² = x⁴
-    let s = vmulq_f64(z, x); // s = z*x = x³
+        let z = vmulq_f64(x, x); // z = x²
+        let w = vmulq_f64(z, z); // w = z² = x⁴
+        let s = vmulq_f64(z, x); // s = z*x = x³
 
-    // r = S3 + z*S4
-    let r = vfmaq_f64(s3, z, s4);
+        // r = S3 + z*S4
+        let r = vfmaq_f64(s3, z, s4);
 
-    // (x + s*(S1 + z*S2)) + s*w*r
-    let inner = vfmaq_f64(s1, z, s2); // S1 + z*S2
-    let term1 = vfmaq_f64(x, s, inner); // x + s*(S1 + z*S2)
-    let sw = vmulq_f64(s, w); // s*w = x⁷
-    vfmaq_f64(term1, sw, r) // + x⁷ * (S3 + z*S4)
+        // (x + s*(S1 + z*S2)) + s*w*r
+        let inner = vfmaq_f64(s1, z, s2); // S1 + z*S2
+        let term1 = vfmaq_f64(x, s, inner); // x + s*(S1 + z*S2)
+        let sw = vmulq_f64(s, w); // s*w = x⁷
+        vfmaq_f64(term1, sw, r) // + x⁷ * (S3 + z*S4)
+    }
 }
 
 /// Cosine kernel for reduced argument in `[-π/4, π/4]`.
@@ -189,23 +195,25 @@ unsafe fn sindf_kernel(x: float64x2_t) -> float64x2_t {
 /// where z = x².
 #[inline]
 unsafe fn cosdf_kernel(x: float64x2_t) -> float64x2_t {
-    let c0 = vdupq_n_f64(C0_32);
-    let c1 = vdupq_n_f64(C1_32);
-    let c2 = vdupq_n_f64(C2_32);
-    let c3 = vdupq_n_f64(C3_32);
-    let one = vdupq_n_f64(1.0);
+    unsafe {
+        let c0 = vdupq_n_f64(C0_32);
+        let c1 = vdupq_n_f64(C1_32);
+        let c2 = vdupq_n_f64(C2_32);
+        let c3 = vdupq_n_f64(C3_32);
+        let one = vdupq_n_f64(1.0);
 
-    let z = vmulq_f64(x, x); // z = x²
-    let w = vmulq_f64(z, z); // w = z² = x⁴
+        let z = vmulq_f64(x, x); // z = x²
+        let w = vmulq_f64(z, z); // w = z² = x⁴
 
-    // r = C2 + z*C3
-    let r = vfmaq_f64(c2, z, c3);
+        // r = C2 + z*C3
+        let r = vfmaq_f64(c2, z, c3);
 
-    // ((1 + z*C0) + w*C1) + (w*z)*r
-    let term1 = vfmaq_f64(one, z, c0); // 1 + z*C0
-    let term2 = vfmaq_f64(term1, w, c1); // + w*C1
-    let wz = vmulq_f64(w, z); // w*z = x⁶
-    vfmaq_f64(term2, wz, r) // + x⁶ * (C2 + z*C3)
+        // ((1 + z*C0) + w*C1) + (w*z)*r
+        let term1 = vfmaq_f64(one, z, c0); // 1 + z*C0
+        let term2 = vfmaq_f64(term1, w, c1); // + w*C1
+        let wz = vmulq_f64(w, z); // w*z = x⁶
+        vfmaq_f64(term2, wz, r) // + x⁶ * (C2 + z*C3)
+    }
 }
 
 // =============================================================================
@@ -226,75 +234,77 @@ unsafe fn cosdf_kernel(x: float64x2_t) -> float64x2_t {
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
 pub(crate) unsafe fn vsin_f64(x: float64x2_t) -> float64x2_t {
-    let frac_2_pi = vdupq_n_f64(FRAC_2_PI_64);
-    let pio2_1 = vdupq_n_f64(PIO2_1_64);
-    let pio2_2 = vdupq_n_f64(PIO2_2_64);
-    let pio2_2t = vdupq_n_f64(PIO2_2T_64);
-    let toint = vdupq_n_f64(TOINT);
+    unsafe {
+        let frac_2_pi = vdupq_n_f64(FRAC_2_PI_64);
+        let pio2_1 = vdupq_n_f64(PIO2_1_64);
+        let pio2_2 = vdupq_n_f64(PIO2_2_64);
+        let pio2_2t = vdupq_n_f64(PIO2_2T_64);
+        let toint = vdupq_n_f64(TOINT);
 
-    // -------------------------------------------------------------------------
-    // Step 1: Argument reduction with extended precision
-    // -------------------------------------------------------------------------
-    // Uses musl's __rem_pio2 2nd-iteration approach unconditionally.
-    // Avoids catastrophic cancellation near multiples of π/2.
+        // -------------------------------------------------------------------------
+        // Step 1: Argument reduction with extended precision
+        // -------------------------------------------------------------------------
+        // Uses musl's __rem_pio2 2nd-iteration approach unconditionally.
+        // Avoids catastrophic cancellation near multiples of π/2.
 
-    let fn_val = vsubq_f64(vfmaq_f64(toint, x, frac_2_pi), toint);
-    let n = vcvtq_s64_f64(fn_val);
+        let fn_val = vsubq_f64(vfmaq_f64(toint, x, frac_2_pi), toint);
+        let n = vcvtq_s64_f64(fn_val);
 
-    let r = vfmsq_f64(x, fn_val, pio2_1);
-    let w = vmulq_f64(fn_val, pio2_2);
-    let r2 = vsubq_f64(r, w);
-    let excess = vsubq_f64(vsubq_f64(r, r2), w);
-    let tail = vsubq_f64(vmulq_f64(fn_val, pio2_2t), excess);
-    let y = vsubq_f64(r2, tail);
+        let r = vfmsq_f64(x, fn_val, pio2_1);
+        let w = vmulq_f64(fn_val, pio2_2);
+        let r2 = vsubq_f64(r, w);
+        let excess = vsubq_f64(vsubq_f64(r, r2), w);
+        let tail = vsubq_f64(vmulq_f64(fn_val, pio2_2t), excess);
+        let y = vsubq_f64(r2, tail);
 
-    let abs_x = vabsq_f64(x);
+        let abs_x = vabsq_f64(x);
 
-    // -------------------------------------------------------------------------
-    // Step 2: Compute kernels
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 2: Compute kernels
+        // -------------------------------------------------------------------------
 
-    let sin_y = sin_kernel_f64(y);
-    let cos_y = cos_kernel_f64(y);
+        let sin_y = sin_kernel_f64(y);
+        let cos_y = cos_kernel_f64(y);
 
-    // -------------------------------------------------------------------------
-    // Step 3: Quadrant selection
-    // n mod 4: 0 → sin(y), 1 → cos(y), 2 → -sin(y), 3 → -cos(y)
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 3: Quadrant selection
+        // n mod 4: 0 → sin(y), 1 → cos(y), 2 → -sin(y), 3 → -cos(y)
+        // -------------------------------------------------------------------------
 
-    let one = vdupq_n_s64(1);
-    let two = vdupq_n_s64(2);
+        let one = vdupq_n_s64(1);
+        let two = vdupq_n_s64(2);
 
-    let n_and_1 = vandq_s64(n, one);
-    let n_and_2 = vandq_s64(n, two);
+        let n_and_1 = vandq_s64(n, one);
+        let n_and_2 = vandq_s64(n, two);
 
-    let use_cos = vceqq_s64(n_and_1, one);
-    let negate = vceqq_s64(n_and_2, two);
+        let use_cos = vceqq_s64(n_and_1, one);
+        let negate = vceqq_s64(n_and_2, two);
 
-    let kernel_result = vbslq_f64(use_cos, cos_y, sin_y);
+        let kernel_result = vbslq_f64(use_cos, cos_y, sin_y);
 
-    let sign_bit = vdupq_n_f64(-0.0);
-    let negated = vreinterpretq_f64_u64(veorq_u64(
-        vreinterpretq_u64_f64(kernel_result),
-        vreinterpretq_u64_f64(sign_bit),
-    ));
-    let result = vbslq_f64(negate, negated, kernel_result);
+        let sign_bit = vdupq_n_f64(-0.0);
+        let negated = vreinterpretq_f64_u64(veorq_u64(
+            vreinterpretq_u64_f64(kernel_result),
+            vreinterpretq_u64_f64(sign_bit),
+        ));
+        let result = vbslq_f64(negate, negated, kernel_result);
 
-    // -------------------------------------------------------------------------
-    // Step 4: Handle special cases
-    // sin(±∞) = NaN, sin(NaN) = NaN, sin(±0) = ±0
-    // -------------------------------------------------------------------------
+        // -------------------------------------------------------------------------
+        // Step 4: Handle special cases
+        // sin(±∞) = NaN, sin(NaN) = NaN, sin(±0) = ±0
+        // -------------------------------------------------------------------------
 
-    let inf = vdupq_n_f64(f64::INFINITY);
-    let is_inf_or_nan = vcgeq_f64(abs_x, inf);
-    let nan = vdupq_n_f64(f64::NAN);
+        let inf = vdupq_n_f64(f64::INFINITY);
+        let is_inf_or_nan = vcgeq_f64(abs_x, inf);
+        let nan = vdupq_n_f64(f64::NAN);
 
-    // For tiny values (including ±0), sin(x) ≈ x
-    let tiny = vdupq_n_f64(1e-300);
-    let is_tiny = vcltq_f64(abs_x, tiny);
-    let result = vbslq_f64(is_tiny, x, result);
+        // For tiny values (including ±0), sin(x) ≈ x
+        let tiny = vdupq_n_f64(1e-300);
+        let is_tiny = vcltq_f64(abs_x, tiny);
+        let result = vbslq_f64(is_tiny, x, result);
 
-    vbslq_f64(is_inf_or_nan, nan, result)
+        vbslq_f64(is_inf_or_nan, nan, result)
+    }
 }
 
 /// Sine kernel for f64 reduced argument.
@@ -303,31 +313,33 @@ pub(crate) unsafe fn vsin_f64(x: float64x2_t) -> float64x2_t {
 /// where v = x³, z = x², r = S2 + z*(S3 + z*S4) + z*w*(S5 + z*S6)
 #[inline]
 unsafe fn sin_kernel_f64(x: float64x2_t) -> float64x2_t {
-    let s1 = vdupq_n_f64(S1_64);
-    let s2 = vdupq_n_f64(S2_64);
-    let s3 = vdupq_n_f64(S3_64);
-    let s4 = vdupq_n_f64(S4_64);
-    let s5 = vdupq_n_f64(S5_64);
-    let s6 = vdupq_n_f64(S6_64);
+    unsafe {
+        let s1 = vdupq_n_f64(S1_64);
+        let s2 = vdupq_n_f64(S2_64);
+        let s3 = vdupq_n_f64(S3_64);
+        let s4 = vdupq_n_f64(S4_64);
+        let s5 = vdupq_n_f64(S5_64);
+        let s6 = vdupq_n_f64(S6_64);
 
-    let z = vmulq_f64(x, x); // z = x²
-    let w = vmulq_f64(z, z); // w = x⁴
-    let v = vmulq_f64(z, x); // v = x³
+        let z = vmulq_f64(x, x); // z = x²
+        let w = vmulq_f64(z, z); // w = x⁴
+        let v = vmulq_f64(z, x); // v = x³
 
-    // r = S2 + z*(S3 + z*S4) + z*w*(S5 + z*S6)
-    let inner1 = vfmaq_f64(s3, z, s4); // S3 + z*S4
-    let inner1 = vfmaq_f64(s2, z, inner1); // S2 + z*(S3 + z*S4)
+        // r = S2 + z*(S3 + z*S4) + z*w*(S5 + z*S6)
+        let inner1 = vfmaq_f64(s3, z, s4); // S3 + z*S4
+        let inner1 = vfmaq_f64(s2, z, inner1); // S2 + z*(S3 + z*S4)
 
-    let inner2 = vfmaq_f64(s5, z, s6); // S5 + z*S6
-    let zw = vmulq_f64(z, w); // z*w = x⁶
-    let term2 = vmulq_f64(zw, inner2); // z*w*(S5 + z*S6)
+        let inner2 = vfmaq_f64(s5, z, s6); // S5 + z*S6
+        let zw = vmulq_f64(z, w); // z*w = x⁶
+        let term2 = vmulq_f64(zw, inner2); // z*w*(S5 + z*S6)
 
-    let r = vaddq_f64(inner1, term2);
+        let r = vaddq_f64(inner1, term2);
 
-    // sin(x) = x + v*(S1 + z*r)
-    let zr = vmulq_f64(z, r); // z*r
-    let s1_plus_zr = vaddq_f64(s1, zr); // S1 + z*r
-    vfmaq_f64(x, v, s1_plus_zr) // x + v*(S1 + z*r)
+        // sin(x) = x + v*(S1 + z*r)
+        let zr = vmulq_f64(z, r); // z*r
+        let s1_plus_zr = vaddq_f64(s1, zr); // S1 + z*r
+        vfmaq_f64(x, v, s1_plus_zr) // x + v*(S1 + z*r)
+    }
 }
 
 /// Cosine kernel for f64 reduced argument.
@@ -335,42 +347,44 @@ unsafe fn sin_kernel_f64(x: float64x2_t) -> float64x2_t {
 /// Implements musl's `__cos`: cos(x) ≈ 1 - x²/2 + C1*x⁴ + ... + C6*x¹⁴
 #[inline]
 unsafe fn cos_kernel_f64(x: float64x2_t) -> float64x2_t {
-    let c1 = vdupq_n_f64(C1_64);
-    let c2 = vdupq_n_f64(C2_64);
-    let c3 = vdupq_n_f64(C3_64);
-    let c4 = vdupq_n_f64(C4_64);
-    let c5 = vdupq_n_f64(C5_64);
-    let c6 = vdupq_n_f64(C6_64);
-    let half = vdupq_n_f64(0.5);
-    let one = vdupq_n_f64(1.0);
+    unsafe {
+        let c1 = vdupq_n_f64(C1_64);
+        let c2 = vdupq_n_f64(C2_64);
+        let c3 = vdupq_n_f64(C3_64);
+        let c4 = vdupq_n_f64(C4_64);
+        let c5 = vdupq_n_f64(C5_64);
+        let c6 = vdupq_n_f64(C6_64);
+        let half = vdupq_n_f64(0.5);
+        let one = vdupq_n_f64(1.0);
 
-    let z = vmulq_f64(x, x); // z = x²
-    let w = vmulq_f64(z, z); // w = x⁴
+        let z = vmulq_f64(x, x); // z = x²
+        let w = vmulq_f64(z, z); // w = x⁴
 
-    // r = z*(C1 + z*(C2 + z*C3)) + w*w*(C4 + z*(C5 + z*C6))
-    let inner1 = vfmaq_f64(c2, z, c3); // C2 + z*C3
-    let inner1 = vfmaq_f64(c1, z, inner1); // C1 + z*(C2 + z*C3)
-    let term1 = vmulq_f64(z, inner1); // z * (...)
+        // r = z*(C1 + z*(C2 + z*C3)) + w*w*(C4 + z*(C5 + z*C6))
+        let inner1 = vfmaq_f64(c2, z, c3); // C2 + z*C3
+        let inner1 = vfmaq_f64(c1, z, inner1); // C1 + z*(C2 + z*C3)
+        let term1 = vmulq_f64(z, inner1); // z * (...)
 
-    let inner2 = vfmaq_f64(c5, z, c6); // C5 + z*C6
-    let inner2 = vfmaq_f64(c4, z, inner2); // C4 + z*(C5 + z*C6)
-    let ww = vmulq_f64(w, w); // w*w = x⁸
-    let term2 = vmulq_f64(ww, inner2); // x⁸ * (...)
+        let inner2 = vfmaq_f64(c5, z, c6); // C5 + z*C6
+        let inner2 = vfmaq_f64(c4, z, inner2); // C4 + z*(C5 + z*C6)
+        let ww = vmulq_f64(w, w); // w*w = x⁸
+        let term2 = vmulq_f64(ww, inner2); // x⁸ * (...)
 
-    let r = vaddq_f64(term1, term2);
+        let r = vaddq_f64(term1, term2);
 
-    // cos(x) = 1 - hz + (((1-w) - hz) + z*r)
-    // Simplified: w = 1 - hz, return w + (((1-w)-hz) + z*r)
-    let hz = vmulq_f64(half, z); // hz = z/2
-    let w = vsubq_f64(one, hz); // w = 1 - z/2
+        // cos(x) = 1 - hz + (((1-w) - hz) + z*r)
+        // Simplified: w = 1 - hz, return w + (((1-w)-hz) + z*r)
+        let hz = vmulq_f64(half, z); // hz = z/2
+        let w = vsubq_f64(one, hz); // w = 1 - z/2
 
-    // For better accuracy: w + (((1-w) - hz) + z*r)
-    let one_minus_w = vsubq_f64(one, w); // 1 - w (captures rounding error)
-    let correction = vsubq_f64(one_minus_w, hz); // (1-w) - hz
-    let zr = vmulq_f64(z, r);
-    let final_correction = vaddq_f64(correction, zr);
+        // For better accuracy: w + (((1-w) - hz) + z*r)
+        let one_minus_w = vsubq_f64(one, w); // 1 - w (captures rounding error)
+        let correction = vsubq_f64(one_minus_w, hz); // (1-w) - hz
+        let zr = vmulq_f64(z, r);
+        let final_correction = vaddq_f64(correction, zr);
 
-    vaddq_f64(w, final_correction)
+        vaddq_f64(w, final_correction)
+    }
 }
 
 // =============================================================================

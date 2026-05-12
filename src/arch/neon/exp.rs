@@ -75,20 +75,22 @@ use crate::arch::consts::exp::{
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
 pub(crate) unsafe fn vexp_f32(x: float32x4_t) -> float32x4_t {
-    // Process as two 2-lane f64 operations for precision
-    // Split input into low and high halves, convert to f64
-    let x_lo = vcvt_f64_f32(vget_low_f32(x));
-    let x_hi = vcvt_f64_f32(vget_high_f32(x));
+    unsafe {
+        // Process as two 2-lane f64 operations for precision
+        // Split input into low and high halves, convert to f64
+        let x_lo = vcvt_f64_f32(vget_low_f32(x));
+        let x_hi = vcvt_f64_f32(vget_high_f32(x));
 
-    // Compute exp in f64 precision for each half
-    let exp_lo = exp_core_f64(x_lo);
-    let exp_hi = exp_core_f64(x_hi);
+        // Compute exp in f64 precision for each half
+        let exp_lo = exp_core_f64(x_lo);
+        let exp_hi = exp_core_f64(x_hi);
 
-    // Convert back to f32 and combine
-    let result_lo = vcvt_f32_f64(exp_lo);
-    let result_hi = vcvt_f32_f64(exp_hi);
+        // Convert back to f32 and combine
+        let result_lo = vcvt_f32_f64(exp_lo);
+        let result_hi = vcvt_f32_f64(exp_hi);
 
-    vcombine_f32(result_lo, result_hi)
+        vcombine_f32(result_lo, result_hi)
+    }
 }
 
 // =============================================================================
@@ -109,7 +111,7 @@ pub(crate) unsafe fn vexp_f32(x: float32x4_t) -> float32x4_t {
 /// Requires NEON support. The caller must ensure this feature is available.
 #[inline]
 pub(crate) unsafe fn vexp_f64(x: float64x2_t) -> float64x2_t {
-    exp_core_f64(x)
+    unsafe { exp_core_f64(x) }
 }
 
 // =============================================================================
@@ -125,116 +127,118 @@ pub(crate) unsafe fn vexp_f64(x: float64x2_t) -> float64x2_t {
 /// 4. Scale by `2^k`
 #[inline]
 unsafe fn exp_core_f64(x: float64x2_t) -> float64x2_t {
-    let zero = vdupq_n_f64(0.0);
-    let one = vdupq_n_f64(1.0);
-    let two = vdupq_n_f64(2.0);
-    let half = vdupq_n_f64(0.5);
+    unsafe {
+        let zero = vdupq_n_f64(0.0);
+        let one = vdupq_n_f64(1.0);
+        let two = vdupq_n_f64(2.0);
+        let half = vdupq_n_f64(0.5);
 
-    // =====================================================================
-    // Step 0: Special case detection (save for later)
-    // =====================================================================
+        // =====================================================================
+        // Step 0: Special case detection (save for later)
+        // =====================================================================
 
-    let inf = vdupq_n_f64(f64::INFINITY);
-    let neg_inf = vdupq_n_f64(f64::NEG_INFINITY);
+        let inf = vdupq_n_f64(f64::INFINITY);
+        let neg_inf = vdupq_n_f64(f64::NEG_INFINITY);
 
-    // x is NaN → NaN (NaN != NaN)
-    let is_not_nan = vceqq_f64(x, x);
-    let all_ones = vreinterpretq_u64_s64(vdupq_n_s64(-1));
-    let is_nan = veorq_u64(is_not_nan, all_ones);
+        // x is NaN → NaN (NaN != NaN)
+        let is_not_nan = vceqq_f64(x, x);
+        let all_ones = vreinterpretq_u64_s64(vdupq_n_s64(-1));
+        let is_nan = veorq_u64(is_not_nan, all_ones);
 
-    // x == +∞ → +∞
-    let is_pos_inf = vceqq_f64(x, inf);
+        // x == +∞ → +∞
+        let is_pos_inf = vceqq_f64(x, inf);
 
-    // x == -∞ → 0
-    let is_neg_inf = vceqq_f64(x, neg_inf);
+        // x == -∞ → 0
+        let is_neg_inf = vceqq_f64(x, neg_inf);
 
-    // Overflow: x > 709.78... → +∞
-    let overflow_thresh = vdupq_n_f64(OVERFLOW_THRESH_64);
-    let is_overflow = vcgtq_f64(x, overflow_thresh);
+        // Overflow: x > 709.78... → +∞
+        let overflow_thresh = vdupq_n_f64(OVERFLOW_THRESH_64);
+        let is_overflow = vcgtq_f64(x, overflow_thresh);
 
-    // Underflow: x < -745.13... → 0
-    let underflow_thresh = vdupq_n_f64(UNDERFLOW_THRESH_64);
-    let is_underflow = vcltq_f64(x, underflow_thresh);
+        // Underflow: x < -745.13... → 0
+        let underflow_thresh = vdupq_n_f64(UNDERFLOW_THRESH_64);
+        let is_underflow = vcltq_f64(x, underflow_thresh);
 
-    // =====================================================================
-    // Step 1: Argument reduction
-    // x = k*ln(2) + r, where k = round(x / ln(2)), |r| ≤ ln(2)/2
-    // =====================================================================
+        // =====================================================================
+        // Step 1: Argument reduction
+        // x = k*ln(2) + r, where k = round(x / ln(2)), |r| ≤ ln(2)/2
+        // =====================================================================
 
-    let ln2_inv = vdupq_n_f64(LN2_INV_64);
-    let ln2_hi = vdupq_n_f64(LN2_HI_64);
-    let ln2_lo = vdupq_n_f64(LN2_LO_64);
+        let ln2_inv = vdupq_n_f64(LN2_INV_64);
+        let ln2_hi = vdupq_n_f64(LN2_HI_64);
+        let ln2_lo = vdupq_n_f64(LN2_LO_64);
 
-    // k = round(x / ln(2))
-    // Use trunc(x * (1/ln2) + copysign(0.5, x)) to get nearest integer
-    let sign_bit = vdupq_n_f64(-0.0);
-    let x_sign = vandq_u64(vreinterpretq_u64_f64(x), vreinterpretq_u64_f64(sign_bit));
-    let sign_half = vreinterpretq_f64_u64(vorrq_u64(vreinterpretq_u64_f64(half), x_sign));
-    let k_f64 = vrndq_f64(vfmaq_f64(sign_half, x, ln2_inv)); // trunc(x/ln2 + copysign(0.5,x))
+        // k = round(x / ln(2))
+        // Use trunc(x * (1/ln2) + copysign(0.5, x)) to get nearest integer
+        let sign_bit = vdupq_n_f64(-0.0);
+        let x_sign = vandq_u64(vreinterpretq_u64_f64(x), vreinterpretq_u64_f64(sign_bit));
+        let sign_half = vreinterpretq_f64_u64(vorrq_u64(vreinterpretq_u64_f64(half), x_sign));
+        let k_f64 = vrndq_f64(vfmaq_f64(sign_half, x, ln2_inv)); // trunc(x/ln2 + copysign(0.5,x))
 
-    // Convert k to integer for later 2^k construction
-    let k_i64 = vcvtq_s64_f64(k_f64);
+        // Convert k to integer for later 2^k construction
+        let k_i64 = vcvtq_s64_f64(k_f64);
 
-    // r = x - k*ln2_hi - k*ln2_lo (extended precision reduction)
-    // vfmsq_f64(a, b, c) = a - b*c
-    let r = vfmsq_f64(vfmsq_f64(x, k_f64, ln2_hi), k_f64, ln2_lo);
+        // r = x - k*ln2_hi - k*ln2_lo (extended precision reduction)
+        // vfmsq_f64(a, b, c) = a - b*c
+        let r = vfmsq_f64(vfmsq_f64(x, k_f64, ln2_hi), k_f64, ln2_lo);
 
-    // =====================================================================
-    // Step 2: Polynomial approximation
-    // c = r - r²*(P1 + r²*(P2 + r²*(P3 + r²*(P4 + r²*P5))))
-    // exp(r) = 1 - (r*c/(c-2) - r)
-    // =====================================================================
+        // =====================================================================
+        // Step 2: Polynomial approximation
+        // c = r - r²*(P1 + r²*(P2 + r²*(P3 + r²*(P4 + r²*P5))))
+        // exp(r) = 1 - (r*c/(c-2) - r)
+        // =====================================================================
 
-    let r2 = vmulq_f64(r, r); // r²
+        let r2 = vmulq_f64(r, r); // r²
 
-    // Evaluate P(r²) = P1 + r²*(P2 + r²*(P3 + r²*(P4 + r²*P5)))
-    // vfmaq_f64(c, a, b) = a*b + c
-    let p = vfmaq_f64(vdupq_n_f64(P4_64), r2, vdupq_n_f64(P5_64)); // P4 + r²*P5
-    let p = vfmaq_f64(vdupq_n_f64(P3_64), r2, p); // P3 + r²*(...)
-    let p = vfmaq_f64(vdupq_n_f64(P2_64), r2, p); // P2 + r²*(...)
-    let p = vfmaq_f64(vdupq_n_f64(P1_64), r2, p); // P1 + r²*(...)
+        // Evaluate P(r²) = P1 + r²*(P2 + r²*(P3 + r²*(P4 + r²*P5)))
+        // vfmaq_f64(c, a, b) = a*b + c
+        let p = vfmaq_f64(vdupq_n_f64(P4_64), r2, vdupq_n_f64(P5_64)); // P4 + r²*P5
+        let p = vfmaq_f64(vdupq_n_f64(P3_64), r2, p); // P3 + r²*(...)
+        let p = vfmaq_f64(vdupq_n_f64(P2_64), r2, p); // P2 + r²*(...)
+        let p = vfmaq_f64(vdupq_n_f64(P1_64), r2, p); // P1 + r²*(...)
 
-    // c = r - r²*P(r²)
-    let c = vsubq_f64(r, vmulq_f64(r2, p));
+        // c = r - r²*P(r²)
+        let c = vsubq_f64(r, vmulq_f64(r2, p));
 
-    // exp(r) = 1 - (r*c/(c-2) - r) = 1 + r + r*c/(2-c)
-    let rc = vmulq_f64(r, c);
-    let c_minus_2 = vsubq_f64(c, two);
-    let exp_r = vsubq_f64(one, vsubq_f64(vdivq_f64(rc, c_minus_2), r));
+        // exp(r) = 1 - (r*c/(c-2) - r) = 1 + r + r*c/(2-c)
+        let rc = vmulq_f64(r, c);
+        let c_minus_2 = vsubq_f64(c, two);
+        let exp_r = vsubq_f64(one, vsubq_f64(vdivq_f64(rc, c_minus_2), r));
 
-    // =====================================================================
-    // Step 3: Reconstruct exp(x) = 2^k * exp(r)
-    // =====================================================================
+        // =====================================================================
+        // Step 3: Reconstruct exp(x) = 2^k * exp(r)
+        // =====================================================================
 
-    // 2^k: shift k left by 52 bits and add to 1.0's exponent
-    let k_shifted = vshlq_n_s64::<52>(k_i64);
-    let one_bits = vdupq_n_s64(0x3FF0000000000000_u64 as i64);
-    let scale = vreinterpretq_f64_s64(vaddq_s64(k_shifted, one_bits));
+        // 2^k: shift k left by 52 bits and add to 1.0's exponent
+        let k_shifted = vshlq_n_s64::<52>(k_i64);
+        let one_bits = vdupq_n_s64(0x3FF0000000000000_u64 as i64);
+        let scale = vreinterpretq_f64_s64(vaddq_s64(k_shifted, one_bits));
 
-    let result = vmulq_f64(exp_r, scale);
+        let result = vmulq_f64(exp_r, scale);
 
-    // =====================================================================
-    // Step 4: Apply special cases
-    // =====================================================================
+        // =====================================================================
+        // Step 4: Apply special cases
+        // =====================================================================
 
-    let nan = vdupq_n_f64(f64::NAN);
+        let nan = vdupq_n_f64(f64::NAN);
 
-    // Overflow → +∞
-    let result = vbslq_f64(is_overflow, inf, result);
+        // Overflow → +∞
+        let result = vbslq_f64(is_overflow, inf, result);
 
-    // Underflow → 0
-    let result = vbslq_f64(is_underflow, zero, result);
+        // Underflow → 0
+        let result = vbslq_f64(is_underflow, zero, result);
 
-    // x == +∞ → +∞
-    let result = vbslq_f64(is_pos_inf, inf, result);
+        // x == +∞ → +∞
+        let result = vbslq_f64(is_pos_inf, inf, result);
 
-    // x == -∞ → 0
-    let result = vbslq_f64(is_neg_inf, zero, result);
+        // x == -∞ → 0
+        let result = vbslq_f64(is_neg_inf, zero, result);
 
-    // x is NaN → NaN
-    let result = vbslq_f64(is_nan, nan, result);
+        // x is NaN → NaN
+        let result = vbslq_f64(is_nan, nan, result);
 
-    result
+        result
+    }
 }
 
 // =============================================================================
