@@ -8,7 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C target-feature=+avx512f,+avx512vl"
 
 jobs:
   fmt:
@@ -29,7 +28,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: RUSTFLAGS="-C target-feature=+avx512f,+avx512vl" cargo clippy --all-targets -- -D warnings
 
   build:
     name: Build (no run — GitHub runners lack AVX-512)
