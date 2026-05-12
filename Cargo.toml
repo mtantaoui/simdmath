@@ -2,7 +2,7 @@
 name = "simdmath"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.89"
 authors = ["Mahdi Tantaoui <mohamedalmahdi.tantaoui@gmail.com>"]
 description = "High-performance SIMD implementations of mathematical functions for Rust (AVX2, AVX-512, NEON), with worst-case ≤ 3 ULP accuracy (most functions ≤ 1 ULP; sqrt and abs correctly rounded)."
 license = "MIT"
