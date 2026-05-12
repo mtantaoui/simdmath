@@ -28,7 +28,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: RUSTFLAGS="-C target-feature=+avx512f,+avx512vl" cargo clippy --all-targets -- -D warnings
+      - run: RUSTFLAGS="-C target-feature=+avx512f,+avx512vl" cargo clippy --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
 
   build:
     name: Build (no run — GitHub runners lack AVX-512)
