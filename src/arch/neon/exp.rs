@@ -235,9 +235,7 @@ unsafe fn exp_core_f64(x: float64x2_t) -> float64x2_t {
         let result = vbslq_f64(is_neg_inf, zero, result);
 
         // x is NaN → NaN
-        let result = vbslq_f64(is_nan, nan, result);
-
-        result
+        vbslq_f64(is_nan, nan, result)
     }
 }
 
