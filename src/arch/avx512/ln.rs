@@ -314,14 +314,14 @@ mod tests {
     /// Helper to extract f32 lanes from __m512
     unsafe fn extract_ps(v: __m512) -> [f32; 16] {
         let mut out = [0.0f32; 16];
-        _mm512_storeu_ps(out.as_mut_ptr(), v);
+        unsafe { _mm512_storeu_ps(out.as_mut_ptr(), v) };
         out
     }
 
     /// Helper to extract f64 lanes from __m512d
     unsafe fn extract_pd(v: __m512d) -> [f64; 8] {
         let mut out = [0.0f64; 8];
-        _mm512_storeu_pd(out.as_mut_ptr(), v);
+        unsafe { _mm512_storeu_pd(out.as_mut_ptr(), v) };
         out
     }
 
