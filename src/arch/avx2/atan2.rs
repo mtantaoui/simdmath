@@ -49,7 +49,7 @@
 //!
 //! All branches are computed unconditionally; results are merged with
 //! `_mm256_blendv_ps` / `_mm256_blendv_pd` in priority order (highest to lowest):
-//! NaN → x==1 → y==0 → x==0 → x==∞ → huge ratio → general case
+//! NaN → y==0 → x==0 → x==∞ → huge ratio → general case
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -106,7 +106,6 @@ pub(crate) unsafe fn _mm256_atan2_ps(y: __m256, x: __m256) -> __m256 {
 
         // Integer masks for bit manipulation
         let abs_mask = _mm256_set1_epi32(0x7FFF_FFFF_u32 as i32);
-        let one_bits = _mm256_set1_epi32(0x3F80_0000_u32 as i32); // 1.0f32
         let inf_bits = _mm256_set1_epi32(0x7F80_0000_u32 as i32); // +∞
         let huge_threshold = _mm256_set1_epi32(HUGE_RATIO_THRESHOLD_32);
 
@@ -143,7 +142,6 @@ pub(crate) unsafe fn _mm256_atan2_ps(y: __m256, x: __m256) -> __m256 {
         // -------------------------------------------------------------------------
         // Condition masks for special cases
         // -------------------------------------------------------------------------
-        let is_x_one = _mm256_cmpeq_epi32(x_bits, one_bits); // x == 1.0 exactly
         let is_y_zero = _mm256_cmpeq_epi32(iy, _mm256_setzero_si256()); // y == ±0
         let is_x_zero = _mm256_cmpeq_epi32(ix, _mm256_setzero_si256()); // x == ±0
         let is_x_inf = _mm256_cmpeq_epi32(ix, inf_bits); // |x| == ∞
@@ -166,11 +164,6 @@ pub(crate) unsafe fn _mm256_atan2_ps(y: __m256, x: __m256) -> __m256 {
         // Case: NaN — if either input is NaN, return NaN (as x + y)
         // -------------------------------------------------------------------------
         let result_nan = _mm256_add_ps(x, y);
-
-        // -------------------------------------------------------------------------
-        // Case: x == 1.0 — return atan(y) directly
-        // -------------------------------------------------------------------------
-        let result_x_one = _mm256_atan_ps(y);
 
         // -------------------------------------------------------------------------
         // Case: y == ±0
@@ -285,7 +278,6 @@ pub(crate) unsafe fn _mm256_atan2_ps(y: __m256, x: __m256) -> __m256 {
         result = _mm256_blendv_ps(result, result_x_inf, _mm256_castsi256_ps(is_x_inf));
         result = _mm256_blendv_ps(result, result_x_zero, _mm256_castsi256_ps(is_x_zero));
         result = _mm256_blendv_ps(result, result_y_zero, _mm256_castsi256_ps(is_y_zero));
-        result = _mm256_blendv_ps(result, result_x_one, _mm256_castsi256_ps(is_x_one));
         result = _mm256_blendv_ps(result, result_nan, _mm256_or_ps(is_x_nan, is_y_nan));
 
         result
@@ -335,7 +327,6 @@ pub(crate) unsafe fn _mm256_atan2_pd(y: __m256d, x: __m256d) -> __m256d {
 
         // Integer masks for bit manipulation (64-bit lanes)
         let abs_mask = _mm256_set1_epi64x(0x7FFF_FFFF_FFFF_FFFF_u64 as i64);
-        let one_bits = _mm256_set1_epi64x(0x3FF0_0000_0000_0000_u64 as i64); // 1.0f64
         let inf_bits = _mm256_set1_epi64x(0x7FF0_0000_0000_0000_u64 as i64); // +∞
         let huge_threshold = _mm256_set1_epi64x(HUGE_RATIO_THRESHOLD_64);
 
@@ -370,7 +361,6 @@ pub(crate) unsafe fn _mm256_atan2_pd(y: __m256d, x: __m256d) -> __m256d {
         // -------------------------------------------------------------------------
         // Condition masks for special cases
         // -------------------------------------------------------------------------
-        let is_x_one = _mm256_cmpeq_epi64(x_bits, one_bits);
         let is_y_zero = _mm256_cmpeq_epi64(iy, _mm256_setzero_si256());
         let is_x_zero = _mm256_cmpeq_epi64(ix, _mm256_setzero_si256());
         let is_x_inf = _mm256_cmpeq_epi64(ix, inf_bits);
@@ -393,11 +383,6 @@ pub(crate) unsafe fn _mm256_atan2_pd(y: __m256d, x: __m256d) -> __m256d {
         // Case: NaN — if either input is NaN, return NaN (as x + y)
         // -------------------------------------------------------------------------
         let result_nan = _mm256_add_pd(x, y);
-
-        // -------------------------------------------------------------------------
-        // Case: x == 1.0 — return atan(y) directly
-        // -------------------------------------------------------------------------
-        let result_x_one = _mm256_atan_pd(y);
 
         // -------------------------------------------------------------------------
         // Case: y == ±0
@@ -491,7 +476,6 @@ pub(crate) unsafe fn _mm256_atan2_pd(y: __m256d, x: __m256d) -> __m256d {
         result = _mm256_blendv_pd(result, result_x_inf, _mm256_castsi256_pd(is_x_inf));
         result = _mm256_blendv_pd(result, result_x_zero, _mm256_castsi256_pd(is_x_zero));
         result = _mm256_blendv_pd(result, result_y_zero, _mm256_castsi256_pd(is_y_zero));
-        result = _mm256_blendv_pd(result, result_x_one, _mm256_castsi256_pd(is_x_one));
         result = _mm256_blendv_pd(result, result_nan, _mm256_or_pd(is_x_nan, is_y_nan));
 
         result

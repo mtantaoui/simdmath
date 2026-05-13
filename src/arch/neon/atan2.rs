@@ -49,7 +49,7 @@
 //!
 //! All branches are computed unconditionally; results are merged with
 //! `vbslq_f32` / `vbslq_f64` in priority order (highest to lowest):
-//! NaN → x==1 → y==0 → x==0 → x==∞ → huge ratio → general case
+//! NaN → y==0 → x==0 → x==∞ → huge ratio → general case
 //!
 //! ## NEON notes
 //!
@@ -109,7 +109,6 @@ pub(crate) unsafe fn vatan2_f32(y: float32x4_t, x: float32x4_t) -> float32x4_t {
 
         // Integer constants for bit manipulation
         let abs_mask = vdupq_n_u32(0x7FFF_FFFF);
-        let one_bits = vdupq_n_u32(0x3F80_0000); // 1.0f32
         let inf_bits = vdupq_n_u32(0x7F80_0000); // +∞
         let huge_threshold = vdupq_n_s32(HUGE_RATIO_THRESHOLD_32);
 
@@ -146,7 +145,6 @@ pub(crate) unsafe fn vatan2_f32(y: float32x4_t, x: float32x4_t) -> float32x4_t {
         // -------------------------------------------------------------------------
         // Condition masks for special cases
         // -------------------------------------------------------------------------
-        let is_x_one = vceqq_u32(x_bits, one_bits); // x == 1.0 exactly
         let is_y_zero = vceqq_u32(iy, vdupq_n_u32(0)); // y == ±0
         let is_x_zero = vceqq_u32(ix, vdupq_n_u32(0)); // x == ±0
         let is_x_inf = vceqq_u32(ix, inf_bits); // |x| == ∞
@@ -173,11 +171,6 @@ pub(crate) unsafe fn vatan2_f32(y: float32x4_t, x: float32x4_t) -> float32x4_t {
         // Case: NaN — if either input is NaN, return NaN (as x + y)
         // -------------------------------------------------------------------------
         let result_nan = vaddq_f32(x, y);
-
-        // -------------------------------------------------------------------------
-        // Case: x == 1.0 — return atan(y) directly
-        // -------------------------------------------------------------------------
-        let result_x_one = vatan_f32(y);
 
         // -------------------------------------------------------------------------
         // Case: y == ±0
@@ -265,7 +258,6 @@ pub(crate) unsafe fn vatan2_f32(y: float32x4_t, x: float32x4_t) -> float32x4_t {
         result = vbslq_f32(is_x_inf, result_x_inf, result);
         result = vbslq_f32(is_x_zero, result_x_zero, result);
         result = vbslq_f32(is_y_zero, result_y_zero, result);
-        result = vbslq_f32(is_x_one, result_x_one, result);
         result = vbslq_f32(vorrq_u32(is_x_nan, is_y_nan), result_nan, result);
 
         result
@@ -315,7 +307,6 @@ pub(crate) unsafe fn vatan2_f64(y: float64x2_t, x: float64x2_t) -> float64x2_t {
 
         // Integer constants for bit manipulation (64-bit)
         let abs_mask = vdupq_n_u64(0x7FFF_FFFF_FFFF_FFFF);
-        let one_bits = vdupq_n_u64(0x3FF0_0000_0000_0000); // 1.0f64
         let inf_bits = vdupq_n_u64(0x7FF0_0000_0000_0000); // +∞
         let huge_threshold = vdupq_n_s64(HUGE_RATIO_THRESHOLD_64);
 
@@ -353,7 +344,6 @@ pub(crate) unsafe fn vatan2_f64(y: float64x2_t, x: float64x2_t) -> float64x2_t {
         // -------------------------------------------------------------------------
         // Condition masks for special cases
         // -------------------------------------------------------------------------
-        let is_x_one = vceqq_u64(x_bits, one_bits);
         let is_y_zero = vceqq_u64(iy, vdupq_n_u64(0));
         let is_x_zero = vceqq_u64(ix, vdupq_n_u64(0));
         let is_x_inf = vceqq_u64(ix, inf_bits);
@@ -380,11 +370,6 @@ pub(crate) unsafe fn vatan2_f64(y: float64x2_t, x: float64x2_t) -> float64x2_t {
         // Case: NaN — if either input is NaN, return NaN (as x + y)
         // -------------------------------------------------------------------------
         let result_nan = vaddq_f64(x, y);
-
-        // -------------------------------------------------------------------------
-        // Case: x == 1.0 — return atan(y) directly
-        // -------------------------------------------------------------------------
-        let result_x_one = vatan_f64(y);
 
         // -------------------------------------------------------------------------
         // Case: y == ±0
@@ -450,7 +435,6 @@ pub(crate) unsafe fn vatan2_f64(y: float64x2_t, x: float64x2_t) -> float64x2_t {
         result = vbslq_f64(is_x_inf, result_x_inf, result);
         result = vbslq_f64(is_x_zero, result_x_zero, result);
         result = vbslq_f64(is_y_zero, result_y_zero, result);
-        result = vbslq_f64(is_x_one, result_x_one, result);
         result = vbslq_f64(vorrq_u64(is_x_nan, is_y_nan), result_nan, result);
 
         result

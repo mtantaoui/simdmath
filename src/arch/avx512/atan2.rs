@@ -49,7 +49,7 @@
 //!
 //! All branches are computed unconditionally; results are merged with
 //! AVX-512 mask blend operations in priority order (highest to lowest):
-//! NaN → x==1 → y==0 → x==0 → x==∞ → huge ratio → general case
+//! NaN → y==0 → x==0 → x==∞ → huge ratio → general case
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -107,7 +107,6 @@ pub(crate) unsafe fn _mm512_atan2_ps(y: __m512, x: __m512) -> __m512 {
 
         // Integer masks for bit manipulation
         let abs_mask = _mm512_set1_epi32(0x7FFF_FFFF_u32 as i32);
-        let one_bits = _mm512_set1_epi32(0x3F80_0000_u32 as i32); // 1.0f32
         let inf_bits = _mm512_set1_epi32(0x7F80_0000_u32 as i32); // +∞
         let huge_threshold = _mm512_set1_epi32(HUGE_RATIO_THRESHOLD_32);
 
@@ -144,7 +143,6 @@ pub(crate) unsafe fn _mm512_atan2_ps(y: __m512, x: __m512) -> __m512 {
         // -------------------------------------------------------------------------
         // Condition masks for special cases
         // -------------------------------------------------------------------------
-        let is_x_one: __mmask16 = _mm512_cmpeq_epi32_mask(x_bits, one_bits);
         let is_y_zero: __mmask16 = _mm512_cmpeq_epi32_mask(iy, _mm512_setzero_si512());
         let is_x_zero: __mmask16 = _mm512_cmpeq_epi32_mask(ix, _mm512_setzero_si512());
         let is_x_inf: __mmask16 = _mm512_cmpeq_epi32_mask(ix, inf_bits);
@@ -167,11 +165,6 @@ pub(crate) unsafe fn _mm512_atan2_ps(y: __m512, x: __m512) -> __m512 {
         // Case: NaN — if either input is NaN, return NaN (as x + y)
         // -------------------------------------------------------------------------
         let result_nan = _mm512_add_ps(x, y);
-
-        // -------------------------------------------------------------------------
-        // Case: x == 1.0 — return atan(y) directly
-        // -------------------------------------------------------------------------
-        let result_x_one = _mm512_atan_ps(y);
 
         // -------------------------------------------------------------------------
         // Case: y == ±0
@@ -262,7 +255,6 @@ pub(crate) unsafe fn _mm512_atan2_ps(y: __m512, x: __m512) -> __m512 {
         result = _mm512_mask_blend_ps(is_x_inf, result, result_x_inf);
         result = _mm512_mask_blend_ps(is_x_zero, result, result_x_zero);
         result = _mm512_mask_blend_ps(is_y_zero, result, result_y_zero);
-        result = _mm512_mask_blend_ps(is_x_one, result, result_x_one);
         result = _mm512_mask_blend_ps(is_x_nan | is_y_nan, result, result_nan);
 
         result
@@ -313,7 +305,6 @@ pub(crate) unsafe fn _mm512_atan2_pd(y: __m512d, x: __m512d) -> __m512d {
 
         // Integer masks for bit manipulation (64-bit lanes)
         let abs_mask = _mm512_set1_epi64(0x7FFF_FFFF_FFFF_FFFF_u64 as i64);
-        let one_bits = _mm512_set1_epi64(0x3FF0_0000_0000_0000_u64 as i64); // 1.0f64
         let inf_bits = _mm512_set1_epi64(0x7FF0_0000_0000_0000_u64 as i64); // +∞
         let huge_threshold = _mm512_set1_epi64(HUGE_RATIO_THRESHOLD_64);
 
@@ -348,7 +339,6 @@ pub(crate) unsafe fn _mm512_atan2_pd(y: __m512d, x: __m512d) -> __m512d {
         // -------------------------------------------------------------------------
         // Condition masks for special cases
         // -------------------------------------------------------------------------
-        let is_x_one: __mmask8 = _mm512_cmpeq_epi64_mask(x_bits, one_bits);
         let is_y_zero: __mmask8 = _mm512_cmpeq_epi64_mask(iy, _mm512_setzero_si512());
         let is_x_zero: __mmask8 = _mm512_cmpeq_epi64_mask(ix, _mm512_setzero_si512());
         let is_x_inf: __mmask8 = _mm512_cmpeq_epi64_mask(ix, inf_bits);
@@ -371,11 +361,6 @@ pub(crate) unsafe fn _mm512_atan2_pd(y: __m512d, x: __m512d) -> __m512d {
         // Case: NaN — if either input is NaN, return NaN (as x + y)
         // -------------------------------------------------------------------------
         let result_nan = _mm512_add_pd(x, y);
-
-        // -------------------------------------------------------------------------
-        // Case: x == 1.0 — return atan(y) directly
-        // -------------------------------------------------------------------------
-        let result_x_one = _mm512_atan_pd(y);
 
         // -------------------------------------------------------------------------
         // Case: y == ±0
@@ -445,7 +430,6 @@ pub(crate) unsafe fn _mm512_atan2_pd(y: __m512d, x: __m512d) -> __m512d {
         result = _mm512_mask_blend_pd(is_x_inf, result, result_x_inf);
         result = _mm512_mask_blend_pd(is_x_zero, result, result_x_zero);
         result = _mm512_mask_blend_pd(is_y_zero, result, result_y_zero);
-        result = _mm512_mask_blend_pd(is_x_one, result, result_x_one);
         result = _mm512_mask_blend_pd(is_x_nan | is_y_nan, result, result_nan);
 
         result
