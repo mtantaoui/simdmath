@@ -471,10 +471,20 @@ unsafe fn pow_core_f64(x: __m512d, y: __m512d) -> __m512d {
         let mut result = exp_compensated(ehi, elo);
 
         // =====================================================================
-        // Phase 3: Apply IEEE 754 special cases (order matters!)
+        // Phase 3: Apply IEEE 754 special cases (compressed cascade)
+        //
+        // Every special-case rule produces one of four output categories:
+        //   • +inf / +0 (sign-agnostic)
+        //   • signed inf / signed zero (sign copied from x)
+        //   • NaN
+        //   • 1.0
+        //
+        // Category masks (`__mmask8`) are built in parallel, then applied to
+        // `result` in priority order with only 4 serial blends — vs. ~20 in
+        // the original cascade.
         // =====================================================================
 
-        // --- Negative-base sign correction ---
+        // --- 1. Sign-correct the raw result for x<0 & y odd-integer ---
         let should_negate = x_is_neg & y_is_odd_int;
         let neg_result = _mm512_castsi512_pd(_mm512_xor_si512(
             _mm512_castpd_si512(result),
@@ -482,85 +492,64 @@ unsafe fn pow_core_f64(x: __m512d, y: __m512d) -> __m512d {
         ));
         result = _mm512_mask_blend_pd(should_negate, result, neg_result);
 
-        // Negative base with non-integer exponent → NaN (but not -∞)
-        let neg_base_non_int = !y_is_integer & x_is_neg;
-        let neg_base_non_int = !x_is_neg_inf & neg_base_non_int;
-        result = _mm512_mask_blend_pd(neg_base_non_int, result, nan);
+        // --- 2. Build category masks (all independent / parallel) ---
 
-        // --- pow(±0, y) ---
-        let x_zero_y_neg = x_is_zero & y_is_neg;
-        let x_zero_y_neg_odd = x_zero_y_neg & y_is_odd_int;
+        // mask_inf_pos: output = +∞
+        let mask_inf_pos = (!y_is_odd_int & x_is_zero & y_is_neg)
+            | (x_is_pos_inf & y_is_pos)
+            | (!y_is_odd_int & x_is_neg_inf & y_is_pos)
+            | (y_is_pos_inf & x_abs_gt_one)
+            | (y_is_neg_inf & x_abs_lt_one);
+
+        // mask_zero_pos: output = +0
+        let mask_zero_pos = (!y_is_odd_int & x_is_zero & y_is_pos)
+            | (x_is_pos_inf & y_is_neg)
+            | (!y_is_odd_int & x_is_neg_inf & y_is_neg)
+            | (y_is_pos_inf & x_abs_lt_one)
+            | (y_is_neg_inf & x_abs_gt_one);
+
+        // mask_inf_signed: output = inf | sign(x)
+        //   pow(±0, neg-odd) = ±∞; pow(-∞, pos-odd) = -∞
+        let mask_inf_signed =
+            (x_is_zero & y_is_neg & y_is_odd_int) | (x_is_neg_inf & y_is_pos & y_is_odd_int);
+
+        // mask_zero_signed: output = zero | sign(x)
+        //   pow(±0, pos-odd) = ±0; pow(-∞, neg-odd) = -0
+        let mask_zero_signed =
+            (x_is_zero & y_is_pos & y_is_odd_int) | (x_is_neg_inf & y_is_neg & y_is_odd_int);
+
+        // mask_nan: output = NaN
+        let neg_base_non_int = !x_is_neg_inf & (!y_is_integer & x_is_neg);
+        let x_nan_y_nonzero = !y_is_zero & x_is_nan;
+        let y_nan_x_nonone = !x_is_one & y_is_nan;
+        let mask_nan = neg_base_non_int | x_nan_y_nonzero | y_nan_x_nonone;
+
+        // mask_one: output = 1.0 (highest priority — applied last)
+        let neg_one_inf = x_is_neg_one & y_is_inf;
+        let mask_one = neg_one_inf | y_is_zero | x_is_one;
+
+        // --- 3. Signed value vectors ---
         let signed_inf = _mm512_castsi512_pd(_mm512_or_si512(
             _mm512_castpd_si512(inf),
             _mm512_castpd_si512(x_sign),
         ));
-        result = _mm512_mask_blend_pd(x_zero_y_neg_odd, result, signed_inf);
-
-        let x_zero_y_neg_not_odd = !y_is_odd_int & x_zero_y_neg;
-        result = _mm512_mask_blend_pd(x_zero_y_neg_not_odd, result, inf);
-
-        let x_zero_y_pos = x_is_zero & y_is_pos;
-        let x_zero_y_pos_odd = x_zero_y_pos & y_is_odd_int;
         let signed_zero = _mm512_castsi512_pd(_mm512_or_si512(
             _mm512_castpd_si512(zero),
             _mm512_castpd_si512(x_sign),
         ));
-        result = _mm512_mask_blend_pd(x_zero_y_pos_odd, result, signed_zero);
 
-        let x_zero_y_pos_not_odd = !y_is_odd_int & x_zero_y_pos;
-        result = _mm512_mask_blend_pd(x_zero_y_pos_not_odd, result, zero);
+        // --- 4. Merge the four magnitude categories into one `special_val` ---
+        let inf_val = _mm512_mask_blend_pd(mask_inf_signed, inf, signed_inf);
+        let zero_val = _mm512_mask_blend_pd(mask_zero_signed, zero, signed_zero);
+        let mask_inf_any = mask_inf_pos | mask_inf_signed;
+        let mask_zero_any = mask_zero_pos | mask_zero_signed;
+        let mask_special = mask_inf_any | mask_zero_any;
+        let special_val = _mm512_mask_blend_pd(mask_inf_any, zero_val, inf_val);
 
-        // --- pow(+∞, y) ---
-        let pos_inf_y_neg = x_is_pos_inf & y_is_neg;
-        result = _mm512_mask_blend_pd(pos_inf_y_neg, result, zero);
-        let pos_inf_y_pos = x_is_pos_inf & y_is_pos;
-        result = _mm512_mask_blend_pd(pos_inf_y_pos, result, inf);
-
-        // --- pow(-∞, y) ---
-        let neg_inf_y_neg = x_is_neg_inf & y_is_neg;
-        let neg_inf_y_neg_odd = neg_inf_y_neg & y_is_odd_int;
-        let neg_zero = _mm512_set1_pd(-0.0);
-        result = _mm512_mask_blend_pd(neg_inf_y_neg_odd, result, neg_zero);
-
-        let neg_inf_y_neg_not_odd = !y_is_odd_int & neg_inf_y_neg;
-        result = _mm512_mask_blend_pd(neg_inf_y_neg_not_odd, result, zero);
-
-        let neg_inf_y_pos = x_is_neg_inf & y_is_pos;
-        let neg_inf_y_pos_odd = neg_inf_y_pos & y_is_odd_int;
-        result = _mm512_mask_blend_pd(neg_inf_y_pos_odd, result, neg_inf);
-
-        let neg_inf_y_pos_not_odd = !y_is_odd_int & neg_inf_y_pos;
-        result = _mm512_mask_blend_pd(neg_inf_y_pos_not_odd, result, inf);
-
-        // --- pow(x, ±∞) ---
-        let y_pos_inf_gt = y_is_pos_inf & x_abs_gt_one;
-        result = _mm512_mask_blend_pd(y_pos_inf_gt, result, inf);
-        let y_pos_inf_lt = y_is_pos_inf & x_abs_lt_one;
-        result = _mm512_mask_blend_pd(y_pos_inf_lt, result, zero);
-
-        let y_neg_inf_gt = y_is_neg_inf & x_abs_gt_one;
-        result = _mm512_mask_blend_pd(y_neg_inf_gt, result, zero);
-        let y_neg_inf_lt = y_is_neg_inf & x_abs_lt_one;
-        result = _mm512_mask_blend_pd(y_neg_inf_lt, result, inf);
-
-        // pow(-1, ±∞) = 1
-        let neg_one_inf = x_is_neg_one & y_is_inf;
-        result = _mm512_mask_blend_pd(neg_one_inf, result, one);
-
-        // --- Highest-priority rules (applied last so they win) ---
-
-        // pow(x, ±0) = 1 for any x, including NaN
-        result = _mm512_mask_blend_pd(y_is_zero, result, one);
-
-        // pow(1, y) = 1 for any y, including NaN
-        result = _mm512_mask_blend_pd(x_is_one, result, one);
-
-        // NaN propagation (only when not overridden above)
-        let x_nan_y_nonzero = !y_is_zero & x_is_nan;
-        result = _mm512_mask_blend_pd(x_nan_y_nonzero, result, nan);
-
-        let y_nan_x_nonone = !x_is_one & y_is_nan;
-        result = _mm512_mask_blend_pd(y_nan_x_nonone, result, nan);
+        // --- 5. Apply in priority order — 3 more serial blends ---
+        result = _mm512_mask_blend_pd(mask_special, result, special_val);
+        result = _mm512_mask_blend_pd(mask_nan, result, nan);
+        result = _mm512_mask_blend_pd(mask_one, result, one);
 
         result
     }

@@ -24,6 +24,30 @@ the per-backend SIMD implementation.
   [Foundations](./foundations/ieee754.md) and
   [SIMD Backends](./backends/avx2.md) chapters are prerequisites.
 
+## Performance at a glance
+
+Speed-up of the SIMD path over a scalar baseline, measured at \\(n = 1024\\)
+elements (best of `f32` / `f64`). Full per-type tables with absolute
+throughput numbers live in the [Benchmarks](./benchmarks.md) chapter.
+
+| Function | AVX2 (Core Ultra 7 155H) | AVX-512 (Xeon w5-2555X) | NEON (Apple M1) |
+|----------|:------------------------:|:-----------------------:|:---------------:|
+| `sin`    | 3.2×                     | 5.5×                    | 1.6×            |
+| `cos`    | 3.5×                     | 5.4×                    | 1.7×            |
+| `tan`    | 6.9×                     | 11.1×                   | 2.1×            |
+| `asin`   | 3.4×                     | 3.4×                    | 1.9×            |
+| `acos`   | 2.8×                     | 2.7×                    | 1.6×            |
+| `atan`   | 9.8×                     | 14.6×                   | 5.2×            |
+| `atan2`  | 3.9×                     | 8.3×                    | 1.1×            |
+| `exp`    | 2.6×                     | 4.1×                    | 1.4×            |
+| `ln`     | 1.7×                     | 3.0×                    | 1.2×            |
+| `pow`    | 1.3×                     | 2.0×                    | 0.6×            |
+| `sqrt`   | 1.0×                     | 0.9×                    | 1.0×            |
+| `cbrt`   | 4.9×                     | 5.8×                    | 2.2×            |
+
+`sqrt` throughput is hardware-bound (single instruction on all backends).
+`pow` on NEON is slower than scalar — see the [benchmarks notes](./benchmarks.md#notes-on-sub-1-results) for the explanation.
+
 ## Conventions
 
 Throughout the book:
@@ -38,6 +62,6 @@ Throughout the book:
 
 ## Status
 
-This documentation is being written incrementally. Chapter pages that have
-not yet been authored are stubs and will be filled in over the course of the
-0.1.x series.
+All chapters are complete for the v0.1 release. Future sections will cover
+runtime CPU dispatch (planned for v0.2) and extended input-distribution
+benchmarks.

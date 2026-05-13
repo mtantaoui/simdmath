@@ -464,87 +464,111 @@ unsafe fn pow_core_f64(x: __m256d, y: __m256d) -> __m256d {
         let mut result = exp_compensated(ehi, elo);
 
         // =====================================================================
-        // Phase 3: Apply IEEE 754 special cases (order matters!)
+        // Phase 3: Apply IEEE 754 special cases (compressed cascade)
+        //
+        // Every special-case rule produces one of four output categories:
+        //   • +inf / +0 (sign-agnostic)
+        //   • signed inf / signed zero (sign copied from x)
+        //   • NaN
+        //   • 1.0
+        //
+        // Category masks are built in parallel (no cross-dependency), then
+        // applied to `result` in priority order with only 4 serial blends
+        // (sign-correction, ±inf/±0, NaN, 1.0) — vs. ~20 in the original
+        // serial cascade. Independent value-side blends build `special_val`
+        // and run in parallel with the mask computation.
         // =====================================================================
 
-        // --- Negative-base sign correction ---
+        // --- 1. Sign-correct the raw result for x<0 & y odd-integer ---
         let should_negate = _mm256_and_pd(x_is_neg, y_is_odd_int);
         let neg_result = _mm256_xor_pd(result, sign_bit);
         result = _mm256_blendv_pd(result, neg_result, should_negate);
 
-        // Negative base with non-integer exponent → NaN (but not -∞)
-        let neg_base_non_int = _mm256_andnot_pd(y_is_integer, x_is_neg);
-        let neg_base_non_int = _mm256_andnot_pd(x_is_neg_inf, neg_base_non_int);
-        result = _mm256_blendv_pd(result, nan, neg_base_non_int);
+        // --- 2. Build category masks (all independent / parallel) ---
 
-        // --- pow(±0, y) ---
-        let x_zero_y_neg = _mm256_and_pd(x_is_zero, y_is_neg);
-        let x_zero_y_neg_odd = _mm256_and_pd(x_zero_y_neg, y_is_odd_int);
-        let signed_inf = _mm256_or_pd(inf, x_sign);
-        result = _mm256_blendv_pd(result, signed_inf, x_zero_y_neg_odd);
+        // mask_inf_pos: output = +∞
+        //   pow(0, neg-even), pow(+∞, pos), pow(-∞, pos-even),
+        //   pow(|x|>1, +∞), pow(|x|<1, -∞)
+        let mask_inf_pos = _mm256_or_pd(
+            _mm256_or_pd(
+                _mm256_andnot_pd(y_is_odd_int, _mm256_and_pd(x_is_zero, y_is_neg)),
+                _mm256_and_pd(x_is_pos_inf, y_is_pos),
+            ),
+            _mm256_or_pd(
+                _mm256_andnot_pd(y_is_odd_int, _mm256_and_pd(x_is_neg_inf, y_is_pos)),
+                _mm256_or_pd(
+                    _mm256_and_pd(y_is_pos_inf, x_abs_gt_one),
+                    _mm256_and_pd(y_is_neg_inf, x_abs_lt_one),
+                ),
+            ),
+        );
 
-        let x_zero_y_neg_not_odd = _mm256_andnot_pd(y_is_odd_int, x_zero_y_neg);
-        result = _mm256_blendv_pd(result, inf, x_zero_y_neg_not_odd);
+        // mask_zero_pos: output = +0
+        //   pow(0, pos-even), pow(+∞, neg), pow(-∞, neg-even),
+        //   pow(|x|<1, +∞), pow(|x|>1, -∞)
+        let mask_zero_pos = _mm256_or_pd(
+            _mm256_or_pd(
+                _mm256_andnot_pd(y_is_odd_int, _mm256_and_pd(x_is_zero, y_is_pos)),
+                _mm256_and_pd(x_is_pos_inf, y_is_neg),
+            ),
+            _mm256_or_pd(
+                _mm256_andnot_pd(y_is_odd_int, _mm256_and_pd(x_is_neg_inf, y_is_neg)),
+                _mm256_or_pd(
+                    _mm256_and_pd(y_is_pos_inf, x_abs_lt_one),
+                    _mm256_and_pd(y_is_neg_inf, x_abs_gt_one),
+                ),
+            ),
+        );
 
-        let x_zero_y_pos = _mm256_and_pd(x_is_zero, y_is_pos);
-        let x_zero_y_pos_odd = _mm256_and_pd(x_zero_y_pos, y_is_odd_int);
-        let signed_zero = _mm256_or_pd(zero, x_sign);
-        result = _mm256_blendv_pd(result, signed_zero, x_zero_y_pos_odd);
+        // mask_inf_signed: output = inf | sign(x)
+        //   pow(±0, neg-odd) = ±∞
+        //   pow(-∞, pos-odd) = -∞   (x_sign is negative for x=-∞)
+        let mask_inf_signed = _mm256_or_pd(
+            _mm256_and_pd(_mm256_and_pd(x_is_zero, y_is_neg), y_is_odd_int),
+            _mm256_and_pd(_mm256_and_pd(x_is_neg_inf, y_is_pos), y_is_odd_int),
+        );
 
-        let x_zero_y_pos_not_odd = _mm256_andnot_pd(y_is_odd_int, x_zero_y_pos);
-        result = _mm256_blendv_pd(result, zero, x_zero_y_pos_not_odd);
+        // mask_zero_signed: output = zero | sign(x)
+        //   pow(±0, pos-odd) = ±0
+        //   pow(-∞, neg-odd) = -0   (x_sign is negative for x=-∞)
+        let mask_zero_signed = _mm256_or_pd(
+            _mm256_and_pd(_mm256_and_pd(x_is_zero, y_is_pos), y_is_odd_int),
+            _mm256_and_pd(_mm256_and_pd(x_is_neg_inf, y_is_neg), y_is_odd_int),
+        );
 
-        // --- pow(+∞, y) ---
-        let pos_inf_y_neg = _mm256_and_pd(x_is_pos_inf, y_is_neg);
-        result = _mm256_blendv_pd(result, zero, pos_inf_y_neg);
-        let pos_inf_y_pos = _mm256_and_pd(x_is_pos_inf, y_is_pos);
-        result = _mm256_blendv_pd(result, inf, pos_inf_y_pos);
-
-        // --- pow(-∞, y) ---
-        let neg_inf_y_neg = _mm256_and_pd(x_is_neg_inf, y_is_neg);
-        let neg_inf_y_neg_odd = _mm256_and_pd(neg_inf_y_neg, y_is_odd_int);
-        let neg_zero = _mm256_set1_pd(-0.0);
-        result = _mm256_blendv_pd(result, neg_zero, neg_inf_y_neg_odd);
-
-        let neg_inf_y_neg_not_odd = _mm256_andnot_pd(y_is_odd_int, neg_inf_y_neg);
-        result = _mm256_blendv_pd(result, zero, neg_inf_y_neg_not_odd);
-
-        let neg_inf_y_pos = _mm256_and_pd(x_is_neg_inf, y_is_pos);
-        let neg_inf_y_pos_odd = _mm256_and_pd(neg_inf_y_pos, y_is_odd_int);
-        result = _mm256_blendv_pd(result, neg_inf, neg_inf_y_pos_odd);
-
-        let neg_inf_y_pos_not_odd = _mm256_andnot_pd(y_is_odd_int, neg_inf_y_pos);
-        result = _mm256_blendv_pd(result, inf, neg_inf_y_pos_not_odd);
-
-        // --- pow(x, ±∞) ---
-        let y_pos_inf_gt = _mm256_and_pd(y_is_pos_inf, x_abs_gt_one);
-        result = _mm256_blendv_pd(result, inf, y_pos_inf_gt);
-        let y_pos_inf_lt = _mm256_and_pd(y_is_pos_inf, x_abs_lt_one);
-        result = _mm256_blendv_pd(result, zero, y_pos_inf_lt);
-
-        let y_neg_inf_gt = _mm256_and_pd(y_is_neg_inf, x_abs_gt_one);
-        result = _mm256_blendv_pd(result, zero, y_neg_inf_gt);
-        let y_neg_inf_lt = _mm256_and_pd(y_is_neg_inf, x_abs_lt_one);
-        result = _mm256_blendv_pd(result, inf, y_neg_inf_lt);
-
-        // pow(-1, ±∞) = 1
-        let neg_one_inf = _mm256_and_pd(x_is_neg_one, y_is_inf);
-        result = _mm256_blendv_pd(result, one, neg_one_inf);
-
-        // --- Highest-priority rules (applied last so they win) ---
-
-        // pow(x, ±0) = 1 for any x, including NaN
-        result = _mm256_blendv_pd(result, one, y_is_zero);
-
-        // pow(1, y) = 1 for any y, including NaN
-        result = _mm256_blendv_pd(result, one, x_is_one);
-
-        // NaN propagation (only when not overridden above)
+        // mask_nan: output = NaN
+        //   x<0 with non-integer y (excluding x=-∞, which has IEEE rules)
+        //   pow(NaN, y) with y!=0
+        //   pow(x, NaN) with x!=1
+        let neg_base_non_int =
+            _mm256_andnot_pd(x_is_neg_inf, _mm256_andnot_pd(y_is_integer, x_is_neg));
         let x_nan_y_nonzero = _mm256_andnot_pd(y_is_zero, x_is_nan);
-        result = _mm256_blendv_pd(result, nan, x_nan_y_nonzero);
-
         let y_nan_x_nonone = _mm256_andnot_pd(x_is_one, y_is_nan);
-        result = _mm256_blendv_pd(result, nan, y_nan_x_nonone);
+        let mask_nan =
+            _mm256_or_pd(neg_base_non_int, _mm256_or_pd(x_nan_y_nonzero, y_nan_x_nonone));
+
+        // mask_one: output = 1.0   (highest priority — applied last)
+        //   pow(-1, ±∞), pow(x, ±0), pow(1, y)
+        let neg_one_inf = _mm256_and_pd(x_is_neg_one, y_is_inf);
+        let mask_one = _mm256_or_pd(neg_one_inf, _mm256_or_pd(y_is_zero, x_is_one));
+
+        // --- 3. Build the signed value vectors (independent of cascade) ---
+        let signed_inf = _mm256_or_pd(inf, x_sign);
+        let signed_zero = _mm256_or_pd(zero, x_sign);
+
+        // --- 4. Merge the four magnitude categories into one `special_val`
+        //        via independent blends (parallel with the mask construction) ---
+        let inf_val = _mm256_blendv_pd(inf, signed_inf, mask_inf_signed);
+        let zero_val = _mm256_blendv_pd(zero, signed_zero, mask_zero_signed);
+        let mask_inf_any = _mm256_or_pd(mask_inf_pos, mask_inf_signed);
+        let mask_zero_any = _mm256_or_pd(mask_zero_pos, mask_zero_signed);
+        let mask_special = _mm256_or_pd(mask_inf_any, mask_zero_any);
+        let special_val = _mm256_blendv_pd(zero_val, inf_val, mask_inf_any);
+
+        // --- 5. Apply in priority order — only 3 more serial blends ---
+        result = _mm256_blendv_pd(result, special_val, mask_special);
+        result = _mm256_blendv_pd(result, nan, mask_nan);
+        result = _mm256_blendv_pd(result, one, mask_one);
 
         result
     }
