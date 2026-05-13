@@ -208,10 +208,8 @@ unsafe fn ln_core_f64(x: __m512d) -> __m512d {
     let sqrt2 = _mm512_set1_pd(SQRT2_64);
     let is_big = _mm512_cmp_pd_mask(m, sqrt2, _CMP_GT_OQ);
 
-    // For big m: divide by 2 (subtract 1 from exponent field)
-    let exp_1022 = _mm512_set1_epi64(0x3FE0000000000000_u64 as i64);
-    let m_halved_bits = _mm512_or_si512(_mm512_and_si512(ix, mantissa_mask), exp_1022);
-    let m_halved = _mm512_castsi512_pd(m_halved_bits);
+    // For big m: divide by 2 via float multiply (m ∈ [1,2) so m*0.5 ∈ [0.5,1))
+    let m_halved = _mm512_mul_pd(m, _mm512_set1_pd(0.5));
 
     let m = _mm512_mask_blend_pd(is_big, m, m_halved);
     let k = _mm512_mask_blend_pd(is_big, k, _mm512_add_pd(k, one)); // k++ if big

@@ -199,10 +199,8 @@ unsafe fn ln_core_f64(x: float64x2_t) -> float64x2_t {
         let sqrt2 = vdupq_n_f64(SQRT2_64);
         let is_big = vcgtq_f64(m, sqrt2);
 
-        // For big m: divide by 2 (subtract 1 from exponent field)
-        let exp_1022 = vdupq_n_s64(0x3FE0000000000000_u64 as i64);
-        let m_halved_bits = vorrq_s64(vandq_s64(ix, mantissa_mask), exp_1022);
-        let m_halved = vreinterpretq_f64_s64(m_halved_bits);
+        // For big m: divide by 2 via float multiply (m ∈ [1,2) so m*0.5 ∈ [0.5,1))
+        let m_halved = vmulq_f64(m, vdupq_n_f64(0.5));
 
         let m = vbslq_f64(is_big, m_halved, m);
         let k_inc = vbslq_f64(is_big, one, zero);

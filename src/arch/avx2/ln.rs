@@ -218,10 +218,8 @@ unsafe fn ln_core_f64(x: __m256d) -> __m256d {
         let sqrt2 = _mm256_set1_pd(SQRT2_64);
         let is_big = _mm256_cmp_pd(m, sqrt2, _CMP_GT_OQ);
 
-        // For big m: divide by 2 (subtract 1 from exponent field)
-        let exp_1022 = _mm256_set1_epi64x(0x3FE0000000000000_u64 as i64);
-        let m_halved_bits = _mm256_or_si256(_mm256_and_si256(ix, mantissa_mask), exp_1022);
-        let m_halved = _mm256_castsi256_pd(m_halved_bits);
+        // For big m: divide by 2 via float multiply (m ∈ [1,2) so m*0.5 ∈ [0.5,1))
+        let m_halved = _mm256_mul_pd(m, _mm256_set1_pd(0.5));
 
         let m = _mm256_blendv_pd(m, m_halved, is_big);
         let k = _mm256_add_pd(k, _mm256_and_pd(one, is_big)); // k++ if big
