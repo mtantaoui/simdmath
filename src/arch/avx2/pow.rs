@@ -544,8 +544,10 @@ unsafe fn pow_core_f64(x: __m256d, y: __m256d) -> __m256d {
             _mm256_andnot_pd(x_is_neg_inf, _mm256_andnot_pd(y_is_integer, x_is_neg));
         let x_nan_y_nonzero = _mm256_andnot_pd(y_is_zero, x_is_nan);
         let y_nan_x_nonone = _mm256_andnot_pd(x_is_one, y_is_nan);
-        let mask_nan =
-            _mm256_or_pd(neg_base_non_int, _mm256_or_pd(x_nan_y_nonzero, y_nan_x_nonone));
+        let mask_nan = _mm256_or_pd(
+            neg_base_non_int,
+            _mm256_or_pd(x_nan_y_nonzero, y_nan_x_nonone),
+        );
 
         // mask_one: output = 1.0   (highest priority — applied last)
         //   pow(-1, ±∞), pow(x, ±0), pow(1, y)

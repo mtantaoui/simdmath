@@ -173,9 +173,12 @@ unsafe fn cos_ps_in_f64(x: __m256d) -> __m256d {
 ///
 /// Implements musl's `__cosdf`: cos(x) ≈ 1 + C0*z + C1*z² + C2*z³ + C3*z⁴
 /// where z = x².
+///
+/// Shared with the f32 `sin` path, which uses the same f32-precision polynomial
+/// constants evaluated in f64 arithmetic.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn cosdf_kernel(x: __m256d) -> __m256d {
+pub(crate) unsafe fn cosdf_kernel(x: __m256d) -> __m256d {
     let c0 = _mm256_set1_pd(C0_32);
     let c1 = _mm256_set1_pd(C1_32);
     let c2 = _mm256_set1_pd(C2_32);
@@ -198,9 +201,14 @@ unsafe fn cosdf_kernel(x: __m256d) -> __m256d {
 /// Sine kernel for reduced argument in `[-π/4, π/4]`.
 ///
 /// Implements musl's `__sindf`: sin(x) ≈ x + S1*x³ + S2*x⁵ + S3*x⁷ + S4*x⁹
+///
+/// Shared with the f32 `sin` path. Note: this polynomial form drops the sign
+/// of `x` when `x = ±0` (the leading `x` is added inside an FMA whose other
+/// term can be `+0`); callers must use a tiny-input shortcut to preserve the
+/// sign of zero.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn sindf_kernel(x: __m256d) -> __m256d {
+pub(crate) unsafe fn sindf_kernel(x: __m256d) -> __m256d {
     let s1 = _mm256_set1_pd(S1_32);
     let s2 = _mm256_set1_pd(S2_32);
     let s3 = _mm256_set1_pd(S3_32);

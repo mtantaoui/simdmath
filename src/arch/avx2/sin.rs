@@ -42,20 +42,23 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 
 use crate::arch::consts::sin::{
-    C0_32, C1_32, C1_64, C2_32, C2_64, C3_32, C3_64, C4_64, C5_64, C6_64, FRAC_2_PI_32,
-    FRAC_2_PI_64, PIO2_1_32, PIO2_1_64, PIO2_1T_32, PIO2_2_64, PIO2_2T_64, S1_32, S1_64, S2_32,
-    S2_64, S3_32, S3_64, S4_32, S4_64, S5_64, S6_64, TOINT,
+    C1_64, C2_64, C3_64, C4_64, C5_64, C6_64, FRAC_2_PI_32, FRAC_2_PI_64, PIO2_1_32, PIO2_1_64,
+    PIO2_1T_32, PIO2_2_64, PIO2_2T_64, S1_64, S2_64, S3_64, S4_64, S5_64, S6_64, TOINT,
 };
 
+use super::cos::{cosdf_kernel, sindf_kernel};
+
 // =============================================================================
-// f32 Implementation (8 lanes, native f32)
+// f32 Implementation (8 lanes, computed in f64 precision internally)
 // =============================================================================
 
 /// Computes `sin(x)` for each lane of an AVX2 `__m256` register.
 ///
-/// Uses the musl libc algorithm: Cody-Waite argument reduction to `[-π/4, π/4]`
-/// followed by polynomial evaluation of the appropriate sin/cos kernel based
-/// on the quadrant. All computation is done natively in f32.
+/// Promotes the 8 f32 lanes to two 4-lane f64 halves and runs the Cody-Waite
+/// reduction + sin/cos kernel in f64. The reduction in f64 is what makes the
+/// answer correct near multiples of `π/2` — pure f32 reduction loses ~5 bits
+/// of precision in `x - n·(π/2)`. This matches what musl's `__rem_pio2f.c`
+/// does (the f32 `sin` reduction is done in `double`).
 ///
 /// # Precision
 ///
@@ -69,94 +72,85 @@ use crate::arch::consts::sin::{
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn _mm256_sin_ps(x: __m256) -> __m256 {
     unsafe {
-        let sign_bit = _mm256_set1_ps(-0.0_f32);
+        // Split 8-lane f32 into two 4-lane f64 halves (exact promotion)
+        let x_lo = _mm256_cvtps_pd(_mm256_castps256_ps128(x));
+        let x_hi = _mm256_cvtps_pd(_mm256_extractf128_ps(x, 1));
 
-        // -------------------------------------------------------------------------
-        // Step 1: Argument reduction — y = x - n*(π/2), |y| ≤ π/4
-        // -------------------------------------------------------------------------
-        let frac_2_pi = _mm256_set1_ps(FRAC_2_PI_32 as f32);
-        let pio2_1 = _mm256_set1_ps(PIO2_1_32 as f32);
-        let pio2_1t = _mm256_set1_ps(PIO2_1T_32 as f32);
+        // Compute sin in f64 precision for each half
+        let sin_lo = sin_ps_in_f64(x_lo);
+        let sin_hi = sin_ps_in_f64(x_hi);
 
-        let fn_val = _mm256_round_ps(
-            _mm256_mul_ps(x, frac_2_pi),
-            _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC,
-        );
-        let n = _mm256_cvtps_epi32(fn_val);
-        let y = _mm256_fnmadd_ps(fn_val, pio2_1t, _mm256_fnmadd_ps(fn_val, pio2_1, x));
-
-        // -------------------------------------------------------------------------
-        // Step 2: Polynomial kernels
-        // -------------------------------------------------------------------------
-        let sin_y = sindf_kernel_f32(y);
-        let cos_y = cosdf_kernel_f32(y);
-
-        // -------------------------------------------------------------------------
-        // Step 3: Quadrant selection
-        // n mod 4: 0 →  sin(y)   1 →  cos(y)
-        //          2 → -sin(y)   3 → -cos(y)
-        // -------------------------------------------------------------------------
-        let one = _mm256_set1_epi32(1);
-        let two = _mm256_set1_epi32(2);
-        let use_cos = _mm256_castsi256_ps(_mm256_cmpeq_epi32(_mm256_and_si256(n, one), one));
-        let negate = _mm256_castsi256_ps(_mm256_cmpeq_epi32(_mm256_and_si256(n, two), two));
-
-        let kernel = _mm256_blendv_ps(sin_y, cos_y, use_cos);
-        let result = _mm256_blendv_ps(kernel, _mm256_xor_ps(kernel, sign_bit), negate);
-
-        // -------------------------------------------------------------------------
-        // Step 4: Special cases — ±∞ and NaN → NaN
-        // -------------------------------------------------------------------------
-        let abs_x = _mm256_andnot_ps(sign_bit, x);
-        let inf = _mm256_set1_ps(f32::INFINITY);
-        let is_inf_or_nan = _mm256_cmp_ps(abs_x, inf, _CMP_GE_OQ);
-
-        _mm256_blendv_ps(result, _mm256_set1_ps(f32::NAN), is_inf_or_nan)
+        // Narrow back to f32 and recombine
+        let result_lo = _mm256_cvtpd_ps(sin_lo);
+        let result_hi = _mm256_cvtpd_ps(sin_hi);
+        _mm256_insertf128_ps(_mm256_castps128_ps256(result_lo), result_hi, 1)
     }
 }
 
-/// Sine kernel for f32 reduced argument in `[-π/4, π/4]`.
+/// Internal f64 computation for f32 sine (4 lanes).
 ///
-/// Implements musl's `__sindf` in native f32: sin(x) ≈ x + S1*x³ + S2*x⁵ + S3*x⁷ + S4*x⁹
+/// Mirrors `cos_ps_in_f64` in the cos module: f32-precision polynomial
+/// coefficients evaluated in f64 arithmetic, which is enough margin for ≤ 2 ULP
+/// at f32 output.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn sindf_kernel_f32(x: __m256) -> __m256 {
-    let s1 = _mm256_set1_ps(S1_32 as f32);
-    let s2 = _mm256_set1_ps(S2_32 as f32);
-    let s3 = _mm256_set1_ps(S3_32 as f32);
-    let s4 = _mm256_set1_ps(S4_32 as f32);
+unsafe fn sin_ps_in_f64(x: __m256d) -> __m256d {
+    unsafe {
+        let frac_2_pi = _mm256_set1_pd(FRAC_2_PI_32);
+        let pio2_1 = _mm256_set1_pd(PIO2_1_32);
+        let pio2_1t = _mm256_set1_pd(PIO2_1T_32);
+        let toint = _mm256_set1_pd(TOINT);
+        let sign_bit = _mm256_set1_pd(-0.0);
 
-    let z = _mm256_mul_ps(x, x); // x²
-    let w = _mm256_mul_ps(z, z); // x⁴
-    let s = _mm256_mul_ps(z, x); // x³
+        // -------------------------------------------------------------------------
+        // Step 1: Argument reduction — n = round(x · 2/π), y = x - n·(π/2)
+        // -------------------------------------------------------------------------
+        let fn_val = _mm256_sub_pd(_mm256_fmadd_pd(x, frac_2_pi, toint), toint);
+        let n = _mm256_cvtpd_epi32(fn_val);
+        let y = _mm256_fnmadd_pd(fn_val, pio2_1t, _mm256_fnmadd_pd(fn_val, pio2_1, x));
 
-    let r = _mm256_fmadd_ps(z, s4, s3); // S3 + x²·S4
-    let inner = _mm256_fmadd_ps(z, s2, s1); // S1 + x²·S2
-    let term1 = _mm256_fmadd_ps(s, inner, x); // x + x³·(S1 + x²·S2)
-    let sw = _mm256_mul_ps(s, w); // x⁷
-    _mm256_fmadd_ps(sw, r, term1) // + x⁷·(S3 + x²·S4)
-}
+        // -------------------------------------------------------------------------
+        // Step 2: Compute both kernels (the quadrant selects which lane uses which)
+        // -------------------------------------------------------------------------
 
-/// Cosine kernel for f32 reduced argument in `[-π/4, π/4]`.
-///
-/// Implements musl's `__cosdf` in native f32: cos(x) ≈ 1 + C0*x² + C1*x⁴ + C2*x⁶ + C3*x⁸
-#[inline]
-#[target_feature(enable = "avx2,fma")]
-unsafe fn cosdf_kernel_f32(x: __m256) -> __m256 {
-    let c0 = _mm256_set1_ps(C0_32 as f32);
-    let c1 = _mm256_set1_ps(C1_32 as f32);
-    let c2 = _mm256_set1_ps(C2_32 as f32);
-    let c3 = _mm256_set1_ps(C3_32 as f32);
-    let one = _mm256_set1_ps(1.0_f32);
+        let sin_y = sindf_kernel(y);
+        let cos_y = cosdf_kernel(y);
+        // -------------------------------------------------------------------------
+        // Step 3: Quadrant selection — sin(x):
+        //   n mod 4: 0 →  sin(y), 1 →  cos(y), 2 → -sin(y), 3 → -cos(y)
+        //   use_cos = (n & 1) == 1   (n = 1 or 3)
+        //   negate  = (n & 2) == 2   (n = 2 or 3)
+        // -------------------------------------------------------------------------
+        let n_256 = _mm256_cvtepi32_epi64(n);
+        let one = _mm256_set1_epi64x(1);
+        let two = _mm256_set1_epi64x(2);
+        let use_cos = _mm256_cmpeq_epi64(_mm256_and_si256(n_256, one), one);
+        let negate = _mm256_cmpeq_epi64(_mm256_and_si256(n_256, two), two);
 
-    let z = _mm256_mul_ps(x, x); // x²
-    let w = _mm256_mul_ps(z, z); // x⁴
+        let kernel_result = _mm256_blendv_pd(sin_y, cos_y, _mm256_castsi256_pd(use_cos));
+        let negated = _mm256_xor_pd(kernel_result, sign_bit);
+        let result = _mm256_blendv_pd(kernel_result, negated, _mm256_castsi256_pd(negate));
 
-    let r = _mm256_fmadd_ps(z, c3, c2); // C2 + x²·C3
-    let term1 = _mm256_fmadd_ps(z, c0, one); // 1 + x²·C0
-    let term2 = _mm256_fmadd_ps(w, c1, term1); // + x⁴·C1
-    let wz = _mm256_mul_ps(w, z); // x⁶
-    _mm256_fmadd_ps(wz, r, term2) // + x⁶·(C2 + x²·C3)
+        // -------------------------------------------------------------------------
+        // Step 4: Special cases
+        //   - ±∞ / NaN → NaN
+        //   - For tiny |x| (including ±0), sin(x) ≈ x. Returning `x` directly
+        //     preserves the sign of zero, which the polynomial form would lose
+        //     (the leading `x` in the sin kernel is added inside an FMA whose other
+        //     term can be `+0` even when `x = -0`).
+        // -------------------------------------------------------------------------
+        let abs_x = _mm256_andnot_pd(sign_bit, x);
+        let inf = _mm256_set1_pd(f64::INFINITY);
+        let is_inf_or_nan = _mm256_cmp_pd(abs_x, inf, _CMP_GE_OQ);
+        let nan = _mm256_set1_pd(f64::NAN);
+
+        // |x| < 2^-26 → sin(x) rounds to x at f32 precision; bypass the kernel
+        let tiny = _mm256_set1_pd((2.0_f64).powi(-26));
+        let is_tiny = _mm256_cmp_pd(abs_x, tiny, _CMP_LT_OQ);
+        let result = _mm256_blendv_pd(result, x, is_tiny);
+
+        _mm256_blendv_pd(result, nan, is_inf_or_nan)
+    }
 }
 
 // =============================================================================
