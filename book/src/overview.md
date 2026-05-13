@@ -35,8 +35,6 @@ Throughout the book:
   floating-point number at the same precision.
 - \\(\varepsilon\\) denotes the unit roundoff: \\(2^{-24}\\) for `f32`,
   \\(2^{-53}\\) for `f64`.
-- Display math uses `\\[ … \\]`; inline math uses `\\( … \\)`. Both render via
-  MathJax in the rendered book (mdBook's `mathjax-support` integration).
 
 ## Status
 
