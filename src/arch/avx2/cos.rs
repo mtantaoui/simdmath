@@ -174,8 +174,8 @@ unsafe fn cos_ps_in_f64(x: __m256d) -> __m256d {
 /// Implements musl's `__cosdf`: cos(x) ≈ 1 + C0*z + C1*z² + C2*z³ + C3*z⁴
 /// where z = x².
 ///
-/// Shared with the f32 `sin` path, which uses the same f32-precision polynomial
-/// constants evaluated in f64 arithmetic.
+/// Shared with the f32 `sin` path (evaluated in f64 arithmetic) and imported
+/// directly by the f64 `sin` module.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn cosdf_kernel(x: __m256d) -> __m256d {

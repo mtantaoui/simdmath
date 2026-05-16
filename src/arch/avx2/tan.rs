@@ -166,7 +166,8 @@ unsafe fn tan_ps_in_f64(x: __m256d) -> __m256d {
 
 /// Tangent kernel for reduced argument in `[-π/4, π/4]`.
 ///
-/// Implements musl's `__tandf`: tan(x) ≈ x + T0*x³ + T1*x⁵ + T2*x⁷ + T3*x⁹ + T4*x¹¹ + T5*x¹³
+/// Implements musl's `__tandf`: degree-13 polynomial tan(x) ≈ x + T0·x³ + T1·x⁵ + … + T5·x¹³
+/// evaluated via Horner's method on x².
 #[inline]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn tandf_kernel(x: __m256d) -> __m256d {

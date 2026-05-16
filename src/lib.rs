@@ -49,8 +49,8 @@
 //!
 //! ## Usage
 //!
-//! The primary interface is the [`math::VecMath`] / [`math::SliceMath`] traits
-//! (math functions) and [`ops::vec::VecExt`] / [`ops::vec::SliceExt`]
+//! The primary interface is the [`prelude::VecMath`] / [`prelude::SliceMath`] traits
+//! (math functions) and [`prelude::VecExt`] / [`prelude::SliceExt`]
 //! (arithmetic + reductions). All four are re-exported from the crate's
 //! [`prelude`]:
 //!
@@ -76,18 +76,16 @@
 //! [mathematical reference book](https://github.com/mtantaoui/simdmath/tree/main/book).
 
 mod arch;
-pub mod math;
-pub mod ops;
+pub(crate) mod math;
+pub(crate) mod ops;
 
 #[cfg(test)]
 mod test_utils;
 
 /// Convenience re-exports of the public traits.
 ///
-/// `use simdmath::prelude::*;` brings [`VecMath`](crate::math::VecMath),
-/// [`SliceMath`](crate::math::SliceMath),
-/// [`VecExt`](crate::ops::vec::VecExt) and
-/// [`SliceExt`](crate::ops::vec::SliceExt) into scope, which is enough to use
+/// `use simdmath::prelude::*;` brings [`VecMath`], [`SliceMath`],
+/// [`VecExt`] and [`SliceExt`] into scope, which is enough to use
 /// the crate idiomatically on either `Vec<T>` or `&[T]`.
 pub mod prelude {
     pub use crate::math::{SliceMath, VecMath};

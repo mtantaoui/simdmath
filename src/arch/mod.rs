@@ -1,3 +1,11 @@
+//! Architecture dispatch for SIMD backends.
+//!
+//! Selects the appropriate backend at compile time based on target features:
+//! - **AVX-512** (`x86_64` + `avx512f`)
+//! - **AVX2** (`x86_64` + `avx2`, no `avx512f`)
+//! - **NEON** (`aarch64` + `neon`)
+//! - **Scalar fallback** (all other targets — emits a `compile_error!` until implemented)
+
 #[cfg(all(
     target_arch = "x86_64",
     not(target_feature = "avx512f"),

@@ -236,7 +236,7 @@ pub(crate) unsafe fn _mm256_sin_pd(x: __m256d) -> __m256d {
         let is_inf_or_nan = _mm256_cmp_pd(abs_x, inf, _CMP_GE_OQ);
         let nan = _mm256_set1_pd(f64::NAN);
 
-        // For tiny values (including ±0), sin(x) ≈ x
+        // For tiny values (|x| < 1e-300), sin(x) ≈ x — avoids underflow in the polynomial.
         let tiny = _mm256_set1_pd(1e-300);
         let is_tiny = _mm256_cmp_pd(abs_x, tiny, _CMP_LT_OQ);
         let result = _mm256_blendv_pd(result, x, is_tiny);

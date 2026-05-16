@@ -1,2 +1,2 @@
 pub(crate) mod simd;
-pub mod vec;
+pub(crate) mod vec;

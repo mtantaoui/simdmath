@@ -5,8 +5,7 @@
 //! auto-vectorise them, but no hand-tuned SIMD is performed. This backend
 //! exists so that a default `cargo build` succeeds on any platform.
 //!
-//! For `x86_64` targets where SSE4.1 (but not AVX2/AVX-512) is available, the
-//! [`crate::arch::sse`] module re-uses this scalar implementation as a
-//! placeholder until a true SSE backend is implemented.
+//! SSE-only `x86_64` targets (without AVX2/AVX-512) also fall through to this
+//! backend until a true SSE implementation is added.
 
 pub(crate) mod vec;
