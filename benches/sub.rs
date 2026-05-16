@@ -4,7 +4,7 @@
 mod common;
 
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
-use simdmath::ops::vec::VecExt;
+use simdmath::prelude::*;
 
 use common::*;
 
