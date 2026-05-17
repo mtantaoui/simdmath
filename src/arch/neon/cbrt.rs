@@ -474,7 +474,7 @@ mod tests {
                 let ulp = ulp_distance_f32(r, e);
                 assert!(ulp <= 1, "Lane {i}: cbrt({}) = {r}, ULP = {ulp}", inputs[i]);
             }
-            for (&inp, &e) in [(-1.0_f32, -1.0_f32), (-8.0, -2.0)].iter() {
+            for &(inp, e) in [(-1.0_f32, -1.0_f32), (-8.0, -2.0)].iter() {
                 let r = to_array_f32(vcbrt_f32(vdupq_n_f32(inp)));
                 let ulp = ulp_distance_f32(r[0], e);
                 assert!(ulp <= 1, "cbrt({inp}) = {}, ULP = {ulp}", r[0]);

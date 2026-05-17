@@ -250,14 +250,14 @@ mod tests {
     /// Helper to extract f32 lanes from float32x4_t
     unsafe fn extract_f32x4(v: float32x4_t) -> [f32; 4] {
         let mut out = [0.0f32; 4];
-        vst1q_f32(out.as_mut_ptr(), v);
+        unsafe { vst1q_f32(out.as_mut_ptr(), v) };
         out
     }
 
     /// Helper to extract f64 lanes from float64x2_t
     unsafe fn extract_f64x2(v: float64x2_t) -> [f64; 2] {
         let mut out = [0.0f64; 2];
-        vst1q_f64(out.as_mut_ptr(), v);
+        unsafe { vst1q_f64(out.as_mut_ptr(), v) };
         out
     }
 
@@ -287,14 +287,20 @@ mod tests {
 
             // Overflow and underflow
             let r = extract_f32x4(vexp_f32(vdupq_n_f32(89.0)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(89) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(89) should be +∞"
+            );
 
             let r = extract_f32x4(vexp_f32(vdupq_n_f32(-104.0)));
             assert_eq!(r[0], 0.0, "exp(-104) should be 0.0");
 
             // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
             let r = extract_f32x4(vexp_f32(vdupq_n_f32(f32::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(+∞) should be +∞"
+            );
 
             let r = extract_f32x4(vexp_f32(vdupq_n_f32(f32::NEG_INFINITY)));
             assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
@@ -403,14 +409,20 @@ mod tests {
 
             // Overflow and underflow
             let r = extract_f64x2(vexp_f64(vdupq_n_f64(710.0)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(710) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(710) should be +∞"
+            );
 
             let r = extract_f64x2(vexp_f64(vdupq_n_f64(-746.0)));
             assert_eq!(r[0], 0.0, "exp(-746) should be 0.0");
 
             // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
             let r = extract_f64x2(vexp_f64(vdupq_n_f64(f64::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(+∞) should be +∞"
+            );
 
             let r = extract_f64x2(vexp_f64(vdupq_n_f64(f64::NEG_INFINITY)));
             assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
@@ -496,5 +508,4 @@ mod tests {
             );
         }
     }
-
 }

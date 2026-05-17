@@ -400,14 +400,14 @@ mod tests {
     /// Helper to extract f32 lanes from float32x4_t
     unsafe fn extract_f32(v: float32x4_t) -> [f32; 4] {
         let mut out = [0.0f32; 4];
-        vst1q_f32(out.as_mut_ptr(), v);
+        unsafe { vst1q_f32(out.as_mut_ptr(), v) };
         out
     }
 
     /// Helper to extract f64 lanes from float64x2_t
     unsafe fn extract_f64(v: float64x2_t) -> [f64; 2] {
         let mut out = [0.0f64; 2];
-        vst1q_f64(out.as_mut_ptr(), v);
+        unsafe { vst1q_f64(out.as_mut_ptr(), v) };
         out
     }
 
@@ -437,7 +437,11 @@ mod tests {
             assert!(r[0].abs() < 1e-6, "sin(π) = {}", r[0]);
 
             let r = extract_f32(vsin_f32(vdupq_n_f32(PI32 / 4.0)));
-            assert!((r[0] - (PI32 / 4.0).sin()).abs() < 1e-6, "sin(π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (PI32 / 4.0).sin()).abs() < 1e-6,
+                "sin(π/4) = {}",
+                r[0]
+            );
 
             // NaN and infinities → NaN
             for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {

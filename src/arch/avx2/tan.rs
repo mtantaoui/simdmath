@@ -439,10 +439,18 @@ mod tests {
 
             // Known values
             let r = extract_ps(_mm256_tan_ps(_mm256_set1_ps(PI32 / 4.0)));
-            assert!((r[0] - (PI32 / 4.0).tan()).abs() < 1e-5, "tan(π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (PI32 / 4.0).tan()).abs() < 1e-5,
+                "tan(π/4) = {}",
+                r[0]
+            );
 
             let r = extract_ps(_mm256_tan_ps(_mm256_set1_ps(-PI32 / 4.0)));
-            assert!((r[0] - (-PI32 / 4.0).tan()).abs() < 1e-5, "tan(-π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (-PI32 / 4.0).tan()).abs() < 1e-5,
+                "tan(-π/4) = {}",
+                r[0]
+            );
 
             let r = extract_ps(_mm256_tan_ps(_mm256_set1_ps(PI32)));
             assert!(r[0].abs() < 1e-5, "tan(π) = {}", r[0]);
@@ -532,7 +540,11 @@ mod tests {
 
             // Known values
             let r = extract_pd(_mm256_tan_pd(_mm256_set1_pd(PI64 / 4.0)));
-            assert!((r[0] - (PI64 / 4.0).tan()).abs() < 1e-14, "tan(π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (PI64 / 4.0).tan()).abs() < 1e-14,
+                "tan(π/4) = {}",
+                r[0]
+            );
 
             let r = extract_pd(_mm256_tan_pd(_mm256_set1_pd(PI64)));
             assert!(r[0].abs() < 1e-14, "tan(π) = {}", r[0]);

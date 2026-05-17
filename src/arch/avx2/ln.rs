@@ -377,7 +377,10 @@ mod tests {
             // ln(±0) = -∞
             for x in [0.0f32, -0.0] {
                 let r = to_array_ps(_mm256_ln_ps(_mm256_set1_ps(x)));
-                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
+                assert!(
+                    r[0].is_infinite() && r[0].is_sign_negative(),
+                    "ln({x}) should be -∞"
+                );
             }
 
             // ln(x < 0) = NaN, ln(NaN) = NaN
@@ -388,13 +391,21 @@ mod tests {
 
             // ln(+∞) = +∞
             let r = to_array_ps(_mm256_ln_ps(_mm256_set1_ps(f32::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "ln(+∞) should be +∞"
+            );
 
             // Known values: e, e², common inputs, powers of 2, near-1 values (ULP-checked)
             let inputs = [
                 std::f32::consts::E,
                 std::f32::consts::E * std::f32::consts::E,
-                10.0_f32, 0.5, 2.0, 4.0, 0.999, 1.001,
+                10.0_f32,
+                0.5,
+                2.0,
+                4.0,
+                0.999,
+                1.001,
             ];
             let x = _mm256_loadu_ps(inputs.as_ptr());
             let result = to_array_ps(_mm256_ln_ps(x));
@@ -498,7 +509,10 @@ mod tests {
             // ln(±0) = -∞
             for x in [0.0f64, -0.0] {
                 let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(x)));
-                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
+                assert!(
+                    r[0].is_infinite() && r[0].is_sign_negative(),
+                    "ln({x}) should be -∞"
+                );
             }
 
             // ln(x < 0) = NaN, ln(NaN) = NaN
@@ -509,7 +523,10 @@ mod tests {
 
             // ln(+∞) = +∞
             let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(f64::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "ln(+∞) should be +∞"
+            );
 
             // Known values: e, common inputs, powers of 2, subnormal (ULP-checked)
             let tiny = f64::MIN_POSITIVE * 0.5;
@@ -594,5 +611,4 @@ mod tests {
             );
         }
     }
-
 }

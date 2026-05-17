@@ -307,14 +307,14 @@ mod tests {
     /// Helper to extract f32 lanes from float32x4_t
     unsafe fn extract_f32x4(v: float32x4_t) -> [f32; 4] {
         let mut out = [0.0f32; 4];
-        vst1q_f32(out.as_mut_ptr(), v);
+        unsafe { vst1q_f32(out.as_mut_ptr(), v) };
         out
     }
 
     /// Helper to extract f64 lanes from float64x2_t
     unsafe fn extract_f64x2(v: float64x2_t) -> [f64; 2] {
         let mut out = [0.0f64; 2];
-        vst1q_f64(out.as_mut_ptr(), v);
+        unsafe { vst1q_f64(out.as_mut_ptr(), v) };
         out
     }
 
@@ -335,7 +335,10 @@ mod tests {
             // ln(±0) = -∞
             for x in [0.0f32, -0.0] {
                 let r = extract_f32x4(vln_f32(vdupq_n_f32(x)));
-                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
+                assert!(
+                    r[0].is_infinite() && r[0].is_sign_negative(),
+                    "ln({x}) should be -∞"
+                );
             }
 
             // ln(x < 0) = NaN, ln(NaN) = NaN
@@ -346,7 +349,10 @@ mod tests {
 
             // ln(+∞) = +∞
             let r = extract_f32x4(vln_f32(vdupq_n_f32(f32::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "ln(+∞) should be +∞"
+            );
 
             // Known values: e, common inputs, powers of 2 (ULP-checked)
             let inputs = [std::f32::consts::E, 10.0_f32, 0.5, 2.0, 4.0];
@@ -447,7 +453,10 @@ mod tests {
             // ln(±0) = -∞
             for x in [0.0f64, -0.0] {
                 let r = extract_f64x2(vln_f64(vdupq_n_f64(x)));
-                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
+                assert!(
+                    r[0].is_infinite() && r[0].is_sign_negative(),
+                    "ln({x}) should be -∞"
+                );
             }
 
             // ln(x < 0) = NaN, ln(NaN) = NaN
@@ -458,7 +467,10 @@ mod tests {
 
             // ln(+∞) = +∞
             let r = extract_f64x2(vln_f64(vdupq_n_f64(f64::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "ln(+∞) should be +∞"
+            );
 
             // Known values: e, common inputs, powers of 2, subnormal (ULP-checked)
             let tiny = f64::MIN_POSITIVE * 0.5;
@@ -543,5 +555,4 @@ mod tests {
             );
         }
     }
-
 }

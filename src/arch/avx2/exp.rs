@@ -345,14 +345,20 @@ mod tests {
 
             // Overflow and underflow
             let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(89.0)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(89) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(89) should be +∞"
+            );
 
             let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(-104.0)));
             assert_eq!(r[0], 0.0, "exp(-104) should be 0.0");
 
             // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
             let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(f32::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(+∞) should be +∞"
+            );
 
             let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(f32::NEG_INFINITY)));
             assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
@@ -463,14 +469,20 @@ mod tests {
 
             // Overflow and underflow
             let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(710.0)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(710) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(710) should be +∞"
+            );
 
             let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(-746.0)));
             assert_eq!(r[0], 0.0, "exp(-746) should be 0.0");
 
             // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
             let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(f64::INFINITY)));
-            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(+∞) should be +∞"
+            );
 
             let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(f64::NEG_INFINITY)));
             assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
@@ -566,5 +578,4 @@ mod tests {
             );
         }
     }
-
 }

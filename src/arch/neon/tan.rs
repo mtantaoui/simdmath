@@ -404,14 +404,14 @@ mod tests {
     /// Helper to extract f32 lanes from float32x4_t
     unsafe fn extract_f32x4(v: float32x4_t) -> [f32; 4] {
         let mut out = [0.0f32; 4];
-        vst1q_f32(out.as_mut_ptr(), v);
+        unsafe { vst1q_f32(out.as_mut_ptr(), v) };
         out
     }
 
     /// Helper to extract f64 lanes from float64x2_t
     unsafe fn extract_f64x2(v: float64x2_t) -> [f64; 2] {
         let mut out = [0.0f64; 2];
-        vst1q_f64(out.as_mut_ptr(), v);
+        unsafe { vst1q_f64(out.as_mut_ptr(), v) };
         out
     }
 
@@ -435,10 +435,18 @@ mod tests {
 
             // Known values
             let r = extract_f32x4(vtan_f32(vdupq_n_f32(PI32 / 4.0)));
-            assert!((r[0] - (PI32 / 4.0).tan()).abs() < 1e-5, "tan(π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (PI32 / 4.0).tan()).abs() < 1e-5,
+                "tan(π/4) = {}",
+                r[0]
+            );
 
             let r = extract_f32x4(vtan_f32(vdupq_n_f32(-PI32 / 4.0)));
-            assert!((r[0] - (-PI32 / 4.0).tan()).abs() < 1e-5, "tan(-π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (-PI32 / 4.0).tan()).abs() < 1e-5,
+                "tan(-π/4) = {}",
+                r[0]
+            );
 
             let r = extract_f32x4(vtan_f32(vdupq_n_f32(PI32)));
             assert!(r[0].abs() < 1e-5, "tan(π) = {}", r[0]);
@@ -513,7 +521,11 @@ mod tests {
 
             // Known values
             let r = extract_f64x2(vtan_f64(vdupq_n_f64(PI64 / 4.0)));
-            assert!((r[0] - (PI64 / 4.0).tan()).abs() < 1e-14, "tan(π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (PI64 / 4.0).tan()).abs() < 1e-14,
+                "tan(π/4) = {}",
+                r[0]
+            );
 
             let r = extract_f64x2(vtan_f64(vdupq_n_f64(PI64)));
             assert!(r[0].abs() < 1e-14, "tan(π) = {}", r[0]);

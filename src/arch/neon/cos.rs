@@ -394,14 +394,14 @@ mod tests {
     /// Helper to extract f32 lanes from float32x4_t
     unsafe fn extract_f32(v: float32x4_t) -> [f32; 4] {
         let mut out = [0.0f32; 4];
-        vst1q_f32(out.as_mut_ptr(), v);
+        unsafe { vst1q_f32(out.as_mut_ptr(), v) };
         out
     }
 
     /// Helper to extract f64 lanes from float64x2_t
     unsafe fn extract_f64(v: float64x2_t) -> [f64; 2] {
         let mut out = [0.0f64; 2];
-        vst1q_f64(out.as_mut_ptr(), v);
+        unsafe { vst1q_f64(out.as_mut_ptr(), v) };
         out
     }
 

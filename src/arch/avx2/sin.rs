@@ -377,7 +377,11 @@ mod tests {
             assert!(r[0].abs() < 1e-6, "sin(π) = {}", r[0]);
 
             let r = extract_f32x8(_mm256_sin_ps(_mm256_set1_ps(PI32 / 4.0)));
-            assert!((r[0] - (PI32 / 4.0).sin()).abs() < 1e-6, "sin(π/4) = {}", r[0]);
+            assert!(
+                (r[0] - (PI32 / 4.0).sin()).abs() < 1e-6,
+                "sin(π/4) = {}",
+                r[0]
+            );
 
             // NaN and infinities → NaN
             for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {

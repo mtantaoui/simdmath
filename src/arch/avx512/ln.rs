@@ -419,8 +419,8 @@ mod tests {
 
             // Powers of two
             let pow2_inputs = [
-                2.0_f32, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 0.5, 0.25,
-                0.125, 0.0625, 0.03125, 0.015625,
+                2.0_f32, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 0.5, 0.25, 0.125,
+                0.0625, 0.03125, 0.015625,
             ];
             let pow2_expected: [f32; 16] = pow2_inputs.map(|v| v.ln());
             let x = _mm512_loadu_ps(pow2_inputs.as_ptr());
@@ -572,7 +572,16 @@ mod tests {
             assert!(r[0].is_nan(), "ln(NaN) should be NaN, got {}", r[0]);
 
             // Known values
-            let known_inputs = [1.0_f64, std::f64::consts::E, 10.0, 0.5, 2.0, 100.0, 0.1, 3.0];
+            let known_inputs = [
+                1.0_f64,
+                std::f64::consts::E,
+                10.0,
+                0.5,
+                2.0,
+                100.0,
+                0.1,
+                3.0,
+            ];
             let known_expected: [f64; 8] = known_inputs.map(|v| v.ln());
             let x = _mm512_loadu_pd(known_inputs.as_ptr());
             let result = extract_pd(_mm512_ln_pd(x));
@@ -710,5 +719,4 @@ mod tests {
             );
         }
     }
-
 }
