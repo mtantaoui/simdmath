@@ -41,18 +41,18 @@
 /// | Method  | Book chapter |
 /// |---------|--------------|
 /// | [`abs`](Self::abs)       | _(arithmetic-class; see `arithmetic.md`)_ |
-/// | [`sin`](Self::sin)       | [`functions/sin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sin.md) |
-/// | [`cos`](Self::cos)       | [`functions/cos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cos.md) |
-/// | [`tan`](Self::tan)       | [`functions/tan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/tan.md) |
-/// | [`asin`](Self::asin)     | [`functions/asin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/asin.md) |
-/// | [`acos`](Self::acos)     | [`functions/acos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/acos.md) |
-/// | [`atan`](Self::atan)     | [`functions/atan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan.md) |
-/// | [`atan2`](Self::atan2)   | [`functions/atan2.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan2.md) |
-/// | [`exp`](Self::exp)       | [`functions/exp.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/exp.md) |
-/// | [`ln`](Self::ln)         | [`functions/ln.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/ln.md) |
-/// | [`pow`](Self::pow)       | [`functions/pow.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/pow.md) |
-/// | [`sqrt`](Self::sqrt)     | [`functions/sqrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sqrt.md) |
-/// | [`cbrt`](Self::cbrt)     | [`functions/cbrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cbrt.md) |
+/// | [`sin`](Self::sin)       | [`functions/sin`](https://mtantaoui.github.io/simdmath/functions/sin.html) |
+/// | [`cos`](Self::cos)       | [`functions/cos`](https://mtantaoui.github.io/simdmath/functions/cos.html) |
+/// | [`tan`](Self::tan)       | [`functions/tan`](https://mtantaoui.github.io/simdmath/functions/tan.html) |
+/// | [`asin`](Self::asin)     | [`functions/asin`](https://mtantaoui.github.io/simdmath/functions/asin.html) |
+/// | [`acos`](Self::acos)     | [`functions/acos`](https://mtantaoui.github.io/simdmath/functions/acos.html) |
+/// | [`atan`](Self::atan)     | [`functions/atan`](https://mtantaoui.github.io/simdmath/functions/atan.html) |
+/// | [`atan2`](Self::atan2)   | [`functions/atan2`](https://mtantaoui.github.io/simdmath/functions/atan2.html) |
+/// | [`exp`](Self::exp)       | [`functions/exp`](https://mtantaoui.github.io/simdmath/functions/exp.html) |
+/// | [`ln`](Self::ln)         | [`functions/ln`](https://mtantaoui.github.io/simdmath/functions/ln.html) |
+/// | [`pow`](Self::pow)       | [`functions/pow`](https://mtantaoui.github.io/simdmath/functions/pow.html) |
+/// | [`sqrt`](Self::sqrt)     | [`functions/sqrt`](https://mtantaoui.github.io/simdmath/functions/sqrt.html) |
+/// | [`cbrt`](Self::cbrt)     | [`functions/cbrt`](https://mtantaoui.github.io/simdmath/functions/cbrt.html) |
 pub trait VecMath<T> {
     /// Returns the absolute value of every element.
     ///
@@ -426,18 +426,18 @@ pub trait VecMath<T> {
 /// | Method  | Book chapter |
 /// |---------|--------------|
 /// | [`abs`](Self::abs)       | _(arithmetic-class; see `arithmetic.md`)_ |
-/// | [`sin`](Self::sin)       | [`functions/sin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sin.md) |
-/// | [`cos`](Self::cos)       | [`functions/cos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cos.md) |
-/// | [`tan`](Self::tan)       | [`functions/tan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/tan.md) |
-/// | [`asin`](Self::asin)     | [`functions/asin.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/asin.md) |
-/// | [`acos`](Self::acos)     | [`functions/acos.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/acos.md) |
-/// | [`atan`](Self::atan)     | [`functions/atan.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan.md) |
-/// | [`atan2`](Self::atan2)   | [`functions/atan2.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/atan2.md) |
-/// | [`exp`](Self::exp)       | [`functions/exp.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/exp.md) |
-/// | [`ln`](Self::ln)         | [`functions/ln.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/ln.md) |
-/// | [`pow`](Self::pow)       | [`functions/pow.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/pow.md) |
-/// | [`sqrt`](Self::sqrt)     | [`functions/sqrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/sqrt.md) |
-/// | [`cbrt`](Self::cbrt)     | [`functions/cbrt.md`](https://github.com/mtantaoui/simdmath/blob/main/book/src/functions/cbrt.md) |
+/// | [`sin`](Self::sin)       | [`functions/sin`](https://mtantaoui.github.io/simdmath/functions/sin.html) |
+/// | [`cos`](Self::cos)       | [`functions/cos`](https://mtantaoui.github.io/simdmath/functions/cos.html) |
+/// | [`tan`](Self::tan)       | [`functions/tan`](https://mtantaoui.github.io/simdmath/functions/tan.html) |
+/// | [`asin`](Self::asin)     | [`functions/asin`](https://mtantaoui.github.io/simdmath/functions/asin.html) |
+/// | [`acos`](Self::acos)     | [`functions/acos`](https://mtantaoui.github.io/simdmath/functions/acos.html) |
+/// | [`atan`](Self::atan)     | [`functions/atan`](https://mtantaoui.github.io/simdmath/functions/atan.html) |
+/// | [`atan2`](Self::atan2)   | [`functions/atan2`](https://mtantaoui.github.io/simdmath/functions/atan2.html) |
+/// | [`exp`](Self::exp)       | [`functions/exp`](https://mtantaoui.github.io/simdmath/functions/exp.html) |
+/// | [`ln`](Self::ln)         | [`functions/ln`](https://mtantaoui.github.io/simdmath/functions/ln.html) |
+/// | [`pow`](Self::pow)       | [`functions/pow`](https://mtantaoui.github.io/simdmath/functions/pow.html) |
+/// | [`sqrt`](Self::sqrt)     | [`functions/sqrt`](https://mtantaoui.github.io/simdmath/functions/sqrt.html) |
+/// | [`cbrt`](Self::cbrt)     | [`functions/cbrt`](https://mtantaoui.github.io/simdmath/functions/cbrt.html) |
 pub trait SliceMath<T> {
     /// Returns the absolute value of every element. Same precision as
     /// [`VecMath::abs`] (**0 ULP**, exact).

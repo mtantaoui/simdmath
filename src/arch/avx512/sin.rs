@@ -423,97 +423,35 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_sin_ps_zero() {
+    fn test_sin_ps_special_values() {
         unsafe {
-            let input = _mm512_set1_ps(0.0);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_positive());
-            }
-        }
-    }
+            // ±0 → ±0 with sign preserved
+            let r = extract_ps(_mm512_sin_ps(_mm512_set1_ps(0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_positive());
 
-    #[test]
-    fn test_sin_ps_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_ps(-0.0);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_negative());
-            }
-        }
-    }
+            let r = extract_ps(_mm512_sin_ps(_mm512_set1_ps(-0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_negative());
 
-    #[test]
-    fn test_sin_ps_pi_over_2() {
-        unsafe {
-            let input = _mm512_set1_ps(PI32 / 2.0);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-6, "sin(π/2) = {}, expected ~1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_ps(_mm512_sin_ps(_mm512_set1_ps(PI32 / 2.0)));
+            assert!((r[0] - 1.0).abs() < 1e-6, "sin(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_sin_ps_pi() {
-        unsafe {
-            let input = _mm512_set1_ps(PI32);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-6, "sin(π) = {}, expected ~0.0", r);
-            }
-        }
-    }
+            let r = extract_ps(_mm512_sin_ps(_mm512_set1_ps(PI32)));
+            assert!(r[0].abs() < 1e-6, "sin(π) = {}", r[0]);
 
-    #[test]
-    fn test_sin_ps_pi_over_4() {
-        unsafe {
-            let input = _mm512_set1_ps(PI32 / 4.0);
-            let result = extract_ps(_mm512_sin_ps(input));
-            let expected = (PI32 / 4.0).sin();
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-6,
-                    "sin(π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
+            let r = extract_ps(_mm512_sin_ps(_mm512_set1_ps(PI32 / 4.0)));
+            assert!(
+                (r[0] - (PI32 / 4.0).sin()).abs() < 1e-6,
+                "sin(π/4) = {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_sin_ps_nan() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NAN);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_ps_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::INFINITY);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(∞) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_ps_negative_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NEG_INFINITY);
-            let result = extract_ps(_mm512_sin_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(-∞) should be NaN");
+            // NaN and infinities → NaN
+            for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let r = extract_ps(_mm512_sin_ps(_mm512_set1_ps(x)));
+                assert!(r[0].is_nan(), "sin({x}) should be NaN, got {}", r[0]);
             }
         }
     }
@@ -592,80 +530,28 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_sin_pd_zero() {
+    fn test_sin_pd_special_values() {
         unsafe {
-            let input = _mm512_set1_pd(0.0);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_positive());
-            }
-        }
-    }
+            // ±0 → ±0 with sign preserved
+            let r = extract_pd(_mm512_sin_pd(_mm512_set1_pd(0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_positive());
 
-    #[test]
-    fn test_sin_pd_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_pd(-0.0);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_negative());
-            }
-        }
-    }
+            let r = extract_pd(_mm512_sin_pd(_mm512_set1_pd(-0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_negative());
 
-    #[test]
-    fn test_sin_pd_pi_over_2() {
-        unsafe {
-            let input = _mm512_set1_pd(PI64 / 2.0);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-14, "sin(π/2) = {}, expected ~1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_pd(_mm512_sin_pd(_mm512_set1_pd(PI64 / 2.0)));
+            assert!((r[0] - 1.0).abs() < 1e-14, "sin(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_sin_pd_pi() {
-        unsafe {
-            let input = _mm512_set1_pd(PI64);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-14, "sin(π) = {}, expected ~0.0", r);
-            }
-        }
-    }
+            let r = extract_pd(_mm512_sin_pd(_mm512_set1_pd(PI64)));
+            assert!(r[0].abs() < 1e-14, "sin(π) = {}", r[0]);
 
-    #[test]
-    fn test_sin_pd_nan() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NAN);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_pd_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::INFINITY);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(∞) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_pd_negative_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NEG_INFINITY);
-            let result = extract_pd(_mm512_sin_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(-∞) should be NaN");
+            // NaN and infinities → NaN
+            for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let r = extract_pd(_mm512_sin_pd(_mm512_set1_pd(x)));
+                assert!(r[0].is_nan(), "sin({x}) should be NaN, got {}", r[0]);
             }
         }
     }

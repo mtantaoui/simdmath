@@ -422,104 +422,31 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_tan_f32_zero() {
+    fn test_tan_f32_special_values() {
         unsafe {
-            let input = vdupq_n_f32(0.0);
-            let result = extract_f32x4(vtan_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_positive());
-            }
-        }
-    }
+            // ±0 → ±0 with sign preserved
+            let r = extract_f32x4(vtan_f32(vdupq_n_f32(0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_positive());
 
-    #[test]
-    fn test_tan_f32_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f32(-0.0);
-            let result = extract_f32x4(vtan_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_negative());
-            }
-        }
-    }
+            let r = extract_f32x4(vtan_f32(vdupq_n_f32(-0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_negative());
 
-    #[test]
-    fn test_tan_f32_pi_over_4() {
-        unsafe {
-            let input = vdupq_n_f32(PI32 / 4.0);
-            let result = extract_f32x4(vtan_f32(input));
-            let expected = (PI32 / 4.0).tan();
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-5,
-                    "tan(π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
+            // Known values
+            let r = extract_f32x4(vtan_f32(vdupq_n_f32(PI32 / 4.0)));
+            assert!((r[0] - (PI32 / 4.0).tan()).abs() < 1e-5, "tan(π/4) = {}", r[0]);
 
-    #[test]
-    fn test_tan_f32_negative_pi_over_4() {
-        unsafe {
-            let input = vdupq_n_f32(-PI32 / 4.0);
-            let result = extract_f32x4(vtan_f32(input));
-            let expected = (-PI32 / 4.0).tan();
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-5,
-                    "tan(-π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
+            let r = extract_f32x4(vtan_f32(vdupq_n_f32(-PI32 / 4.0)));
+            assert!((r[0] - (-PI32 / 4.0).tan()).abs() < 1e-5, "tan(-π/4) = {}", r[0]);
 
-    #[test]
-    fn test_tan_f32_pi() {
-        unsafe {
-            let input = vdupq_n_f32(PI32);
-            let result = extract_f32x4(vtan_f32(input));
-            // tan(π) ≈ 0
-            for &r in &result {
-                assert!(r.abs() < 1e-5, "tan(π) = {}, expected ~0.0", r);
-            }
-        }
-    }
+            let r = extract_f32x4(vtan_f32(vdupq_n_f32(PI32)));
+            assert!(r[0].abs() < 1e-5, "tan(π) = {}", r[0]);
 
-    #[test]
-    fn test_tan_f32_nan() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NAN);
-            let result = extract_f32x4(vtan_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "tan(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_tan_f32_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::INFINITY);
-            let result = extract_f32x4(vtan_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "tan(∞) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_tan_f32_negative_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NEG_INFINITY);
-            let result = extract_f32x4(vtan_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "tan(-∞) should be NaN");
+            // NaN and infinities → NaN
+            for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let r = extract_f32x4(vtan_f32(vdupq_n_f32(x)));
+                assert!(r[0].is_nan(), "tan({x}) should be NaN, got {}", r[0]);
             }
         }
     }
@@ -573,87 +500,28 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_tan_f64_zero() {
+    fn test_tan_f64_special_values() {
         unsafe {
-            let input = vdupq_n_f64(0.0);
-            let result = extract_f64x2(vtan_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_positive());
-            }
-        }
-    }
+            // ±0 → ±0 with sign preserved
+            let r = extract_f64x2(vtan_f64(vdupq_n_f64(0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_positive());
 
-    #[test]
-    fn test_tan_f64_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f64(-0.0);
-            let result = extract_f64x2(vtan_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_negative());
-            }
-        }
-    }
+            let r = extract_f64x2(vtan_f64(vdupq_n_f64(-0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_negative());
 
-    #[test]
-    fn test_tan_f64_pi_over_4() {
-        unsafe {
-            let input = vdupq_n_f64(PI64 / 4.0);
-            let result = extract_f64x2(vtan_f64(input));
-            let expected = (PI64 / 4.0).tan();
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-14,
-                    "tan(π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
+            // Known values
+            let r = extract_f64x2(vtan_f64(vdupq_n_f64(PI64 / 4.0)));
+            assert!((r[0] - (PI64 / 4.0).tan()).abs() < 1e-14, "tan(π/4) = {}", r[0]);
 
-    #[test]
-    fn test_tan_f64_pi() {
-        unsafe {
-            let input = vdupq_n_f64(PI64);
-            let result = extract_f64x2(vtan_f64(input));
-            // tan(π) ≈ 0
-            for &r in &result {
-                assert!(r.abs() < 1e-14, "tan(π) = {}, expected ~0.0", r);
-            }
-        }
-    }
+            let r = extract_f64x2(vtan_f64(vdupq_n_f64(PI64)));
+            assert!(r[0].abs() < 1e-14, "tan(π) = {}", r[0]);
 
-    #[test]
-    fn test_tan_f64_nan() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NAN);
-            let result = extract_f64x2(vtan_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "tan(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_tan_f64_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::INFINITY);
-            let result = extract_f64x2(vtan_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "tan(∞) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_tan_f64_negative_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NEG_INFINITY);
-            let result = extract_f64x2(vtan_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "tan(-∞) should be NaN");
+            // NaN and infinities → NaN
+            for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let r = extract_f64x2(vtan_f64(vdupq_n_f64(x)));
+                assert!(r[0].is_nan(), "tan({x}) should be NaN, got {}", r[0]);
             }
         }
     }

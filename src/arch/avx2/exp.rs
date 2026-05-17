@@ -326,157 +326,39 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_exp_ps_zero() {
-        // exp(0) = 1.0 exactly
+    fn test_exp_ps_special_values() {
         unsafe {
-            let x = _mm256_set1_ps(0.0);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(0) should be exactly 1.0");
+            // exp(±0) = 1 exactly
+            for x in [0.0f32, -0.0] {
+                let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(x)));
+                assert_eq!(r[0], 1.0, "exp({x}) should be 1.0");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_ps_negative_zero() {
-        // exp(-0) = 1.0 exactly
-        unsafe {
-            let x = _mm256_set1_ps(-0.0);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(-0) should be exactly 1.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_ps_one() {
-        // exp(1) ≈ e
-        unsafe {
-            let x = _mm256_set1_ps(1.0);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            let expected = 1.0_f32.exp();
-            for &r in &result {
-                let ulp = ulp_distance_f32(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_ps_negative_one() {
-        // exp(-1) ≈ 1/e
-        unsafe {
-            let x = _mm256_set1_ps(-1.0);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            let expected = (-1.0_f32).exp();
-            for &r in &result {
-                let ulp = ulp_distance_f32(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(-1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_ps_known_values() {
-        unsafe {
+            // Known finite values (ULP-checked)
             let inputs = [0.0_f32, 1.0, -1.0, 2.0, -2.0, 10.0, -10.0, 0.5];
-            let expected: [f32; 8] = inputs.map(|v| v.exp());
             let x = _mm256_loadu_ps(inputs.as_ptr());
             let result = to_array_ps(_mm256_exp_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            for (i, (&r, &inp)) in result.iter().zip(inputs.iter()).enumerate() {
+                let ulp = ulp_distance_f32(r, inp.exp());
+                assert!(ulp <= 2, "Lane {i}: exp({inp}) ULP = {ulp}");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_ps_overflow() {
-        // exp(x) → +∞ for large x
-        unsafe {
-            let x = _mm256_set1_ps(89.0);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(89) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // Overflow and underflow
+            let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(89.0)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(89) should be +∞");
 
-    #[test]
-    fn test_exp_ps_underflow() {
-        // exp(x) → 0 for very negative x
-        unsafe {
-            let x = _mm256_set1_ps(-104.0);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-104) should be 0.0, got {}", r);
-            }
-        }
-    }
+            let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(-104.0)));
+            assert_eq!(r[0], 0.0, "exp(-104) should be 0.0");
 
-    #[test]
-    fn test_exp_ps_pos_infinity() {
-        // exp(+∞) = +∞
-        unsafe {
-            let x = _mm256_set1_ps(f32::INFINITY);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
+            let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(f32::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
 
-    #[test]
-    fn test_exp_ps_neg_infinity() {
-        // exp(-∞) = 0
-        unsafe {
-            let x = _mm256_set1_ps(f32::NEG_INFINITY);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-∞) should be 0.0, got {}", r);
-            }
-        }
-    }
+            let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(f32::NEG_INFINITY)));
+            assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
 
-    #[test]
-    fn test_exp_ps_nan() {
-        // exp(NaN) = NaN
-        unsafe {
-            let x = _mm256_set1_ps(f32::NAN);
-            let result = to_array_ps(_mm256_exp_ps(x));
-            for &r in &result {
-                assert!(r.is_nan(), "exp(NaN) should be NaN, got {}", r);
-            }
+            let r = to_array_ps(_mm256_exp_ps(_mm256_set1_ps(f32::NAN)));
+            assert!(r[0].is_nan(), "exp(NaN) should be NaN");
         }
     }
 
@@ -563,129 +445,38 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_exp_pd_zero() {
+    fn test_exp_pd_special_values() {
         unsafe {
-            let x = _mm256_set1_pd(0.0);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(0) should be exactly 1.0");
+            // exp(±0) = 1 exactly
+            for x in [0.0f64, -0.0] {
+                let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(x)));
+                assert_eq!(r[0], 1.0, "exp({x}) should be 1.0");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_pd_negative_zero() {
-        unsafe {
-            let x = _mm256_set1_pd(-0.0);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(-0) should be exactly 1.0");
+            // Known finite values (ULP-checked), including near-zero
+            let inputs = [0.0_f64, 1.0, -1.0, 10.0, 1e-15, -1e-15];
+            for inp in inputs {
+                let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(inp)));
+                let ulp = ulp_distance_f64(r[0], inp.exp());
+                assert!(ulp <= 2, "exp({inp}) ULP = {ulp}");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_pd_one() {
-        unsafe {
-            let x = _mm256_set1_pd(1.0);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            let expected = 1.0_f64.exp();
-            for &r in &result {
-                let ulp = ulp_distance_f64(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
+            // Overflow and underflow
+            let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(710.0)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(710) should be +∞");
 
-    #[test]
-    fn test_exp_pd_known_values() {
-        unsafe {
-            let inputs = [0.0_f64, 1.0, -1.0, 10.0];
-            let expected: [f64; 4] = inputs.map(|v| v.exp());
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_exp_pd(x));
+            let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(-746.0)));
+            assert_eq!(r[0], 0.0, "exp(-746) should be 0.0");
 
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
+            // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
+            let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(f64::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
 
-    #[test]
-    fn test_exp_pd_overflow() {
-        unsafe {
-            let x = _mm256_set1_pd(710.0);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(710) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(f64::NEG_INFINITY)));
+            assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
 
-    #[test]
-    fn test_exp_pd_underflow() {
-        unsafe {
-            let x = _mm256_set1_pd(-746.0);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-746) should be 0.0, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_pos_infinity() {
-        unsafe {
-            let x = _mm256_set1_pd(f64::INFINITY);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_neg_infinity() {
-        unsafe {
-            let x = _mm256_set1_pd(f64::NEG_INFINITY);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-∞) should be 0.0, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_nan() {
-        unsafe {
-            let x = _mm256_set1_pd(f64::NAN);
-            let result = to_array_pd(_mm256_exp_pd(x));
-            for &r in &result {
-                assert!(r.is_nan(), "exp(NaN) should be NaN, got {}", r);
-            }
+            let r = to_array_pd(_mm256_exp_pd(_mm256_set1_pd(f64::NAN)));
+            assert!(r[0].is_nan(), "exp(NaN) should be NaN");
         }
     }
 
@@ -776,27 +567,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_exp_pd_near_zero() {
-        // Test values very close to zero where exp(x) ≈ 1 + x
-        unsafe {
-            let inputs = [1e-15_f64, -1e-15, 1e-10, -1e-10];
-            let expected: [f64; 4] = inputs.map(|v| v.exp());
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_exp_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({:e}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
 }

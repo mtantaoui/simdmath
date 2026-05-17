@@ -279,49 +279,27 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_exp_ps_zero() {
+    fn test_exp_ps_special_values() {
         unsafe {
-            let input = _mm512_set1_ps(0.0);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(0) should be exactly 1.0");
-            }
-        }
-    }
+            // ±0 → 1.0
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(0.0)));
+            assert_eq!(r[0], 1.0, "exp(0) should be exactly 1.0");
 
-    #[test]
-    fn test_exp_ps_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_ps(-0.0);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(-0) should be exactly 1.0");
-            }
-        }
-    }
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(-0.0)));
+            assert_eq!(r[0], 1.0, "exp(-0) should be exactly 1.0");
 
-    #[test]
-    fn test_exp_ps_one() {
-        unsafe {
-            let input = _mm512_set1_ps(1.0);
-            let result = extract_ps(_mm512_exp_ps(input));
+            // exp(1) within 2 ULP
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(1.0)));
             let expected = 1.0_f32.exp();
-            for &r in &result {
-                let ulp = ulp_diff_f32(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
+            assert!(
+                ulp_diff_f32(r[0], expected) <= 2,
+                "exp(1) = {}, expected {}, ULP = {}",
+                r[0],
+                expected,
+                ulp_diff_f32(r[0], expected)
+            );
 
-    #[test]
-    fn test_exp_ps_known_values() {
-        unsafe {
+            // Known values
             let inputs = [
                 0.0_f32, 1.0, -1.0, 2.0, -2.0, 10.0, -10.0, 0.5, -0.5, 5.0, -5.0, 20.0, -20.0,
                 0.001, -0.001, 3.0,
@@ -329,7 +307,6 @@ mod tests {
             let expected: [f32; 16] = inputs.map(|v| v.exp());
             let x = _mm512_loadu_ps(inputs.as_ptr());
             let result = extract_ps(_mm512_exp_ps(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_diff_f32(r, e);
                 assert!(
@@ -342,69 +319,34 @@ mod tests {
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_ps_overflow() {
-        unsafe {
-            let input = _mm512_set1_ps(89.0);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(89) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // Overflow → +∞
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(89.0)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(89) should be +∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_exp_ps_underflow() {
-        unsafe {
-            let input = _mm512_set1_ps(-104.0);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-104) should be 0.0, got {}", r);
-            }
-        }
-    }
+            // Underflow → 0
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(-104.0)));
+            assert_eq!(r[0], 0.0, "exp(-104) should be 0.0, got {}", r[0]);
 
-    #[test]
-    fn test_exp_ps_pos_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::INFINITY);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // +∞ → +∞
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(f32::INFINITY)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(+∞) should be +∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_exp_ps_neg_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NEG_INFINITY);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-∞) should be 0.0, got {}", r);
-            }
-        }
-    }
+            // -∞ → 0
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(f32::NEG_INFINITY)));
+            assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0, got {}", r[0]);
 
-    #[test]
-    fn test_exp_ps_nan() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NAN);
-            let result = extract_ps(_mm512_exp_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "exp(NaN) should be NaN, got {}", r);
-            }
+            // NaN → NaN
+            let r = extract_ps(_mm512_exp_ps(_mm512_set1_ps(f32::NAN)));
+            assert!(r[0].is_nan(), "exp(NaN) should be NaN, got {}", r[0]);
         }
     }
 
@@ -493,54 +435,31 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_exp_pd_zero() {
+    fn test_exp_pd_special_values() {
         unsafe {
-            let input = _mm512_set1_pd(0.0);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(0) should be exactly 1.0");
-            }
-        }
-    }
+            // ±0 → 1.0
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(0.0)));
+            assert_eq!(r[0], 1.0, "exp(0) should be exactly 1.0");
 
-    #[test]
-    fn test_exp_pd_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_pd(-0.0);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(-0) should be exactly 1.0");
-            }
-        }
-    }
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(-0.0)));
+            assert_eq!(r[0], 1.0, "exp(-0) should be exactly 1.0");
 
-    #[test]
-    fn test_exp_pd_one() {
-        unsafe {
-            let input = _mm512_set1_pd(1.0);
-            let result = extract_pd(_mm512_exp_pd(input));
+            // exp(1) within 2 ULP
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(1.0)));
             let expected = 1.0_f64.exp();
-            for &r in &result {
-                let ulp = ulp_diff_f64(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
+            assert!(
+                ulp_diff_f64(r[0], expected) <= 2,
+                "exp(1) = {}, expected {}, ULP = {}",
+                r[0],
+                expected,
+                ulp_diff_f64(r[0], expected)
+            );
 
-    #[test]
-    fn test_exp_pd_known_values() {
-        unsafe {
+            // Known values
             let inputs = [0.0_f64, 1.0, -1.0, 10.0, -10.0, 0.5, -0.5, 100.0];
             let expected: [f64; 8] = inputs.map(|v| v.exp());
             let x = _mm512_loadu_pd(inputs.as_ptr());
             let result = extract_pd(_mm512_exp_pd(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_diff_f64(r, e);
                 assert!(
@@ -553,68 +472,51 @@ mod tests {
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_pd_overflow() {
-        unsafe {
-            let input = _mm512_set1_pd(710.0);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
+            // Overflow → +∞
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(710.0)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(710) should be +∞, got {}",
+                r[0]
+            );
+
+            // Underflow → 0
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(-746.0)));
+            assert_eq!(r[0], 0.0, "exp(-746) should be 0.0, got {}", r[0]);
+
+            // +∞ → +∞
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(f64::INFINITY)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "exp(+∞) should be +∞, got {}",
+                r[0]
+            );
+
+            // -∞ → 0
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(f64::NEG_INFINITY)));
+            assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0, got {}", r[0]);
+
+            // NaN → NaN
+            let r = extract_pd(_mm512_exp_pd(_mm512_set1_pd(f64::NAN)));
+            assert!(r[0].is_nan(), "exp(NaN) should be NaN, got {}", r[0]);
+
+            // Near-zero values
+            let near_zero_inputs = [1e-15_f64, -1e-15, 1e-10, -1e-10, 1e-5, -1e-5, 1e-3, -1e-3];
+            let near_zero_expected: [f64; 8] = near_zero_inputs.map(|v| v.exp());
+            let x = _mm512_loadu_pd(near_zero_inputs.as_ptr());
+            let result = extract_pd(_mm512_exp_pd(x));
+            for (i, (&r, &e)) in result.iter().zip(near_zero_expected.iter()).enumerate() {
+                let ulp = ulp_diff_f64(r, e);
                 assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(710) should be +∞, got {}",
-                    r
+                    ulp <= 2,
+                    "Lane {}: exp({:e}) = {}, expected {}, ULP = {}",
+                    i,
+                    near_zero_inputs[i],
+                    r,
+                    e,
+                    ulp
                 );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_underflow() {
-        unsafe {
-            let input = _mm512_set1_pd(-746.0);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-746) should be 0.0, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_pos_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::INFINITY);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_neg_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NEG_INFINITY);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-∞) should be 0.0, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_pd_nan() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NAN);
-            let result = extract_pd(_mm512_exp_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "exp(NaN) should be NaN, got {}", r);
             }
         }
     }
@@ -696,26 +598,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_exp_pd_near_zero() {
-        unsafe {
-            let inputs = [1e-15_f64, -1e-15, 1e-10, -1e-10, 1e-5, -1e-5, 1e-3, -1e-3];
-            let expected: [f64; 8] = inputs.map(|v| v.exp());
-            let x = _mm512_loadu_pd(inputs.as_ptr());
-            let result = extract_pd(_mm512_exp_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({:e}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
 }

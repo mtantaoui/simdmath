@@ -84,8 +84,8 @@ mod test_utils;
 
 /// Convenience re-exports of the public traits.
 ///
-/// `use simdmath::prelude::*;` brings [`VecMath`], [`SliceMath`],
-/// [`VecExt`] and [`SliceExt`] into scope, which is enough to use
+/// `use simdmath::prelude::*;` brings [`prelude::VecMath`], [`prelude::SliceMath`],
+/// [`prelude::VecExt`] and [`prelude::SliceExt`] into scope, which is enough to use
 /// the crate idiomatically on either `Vec<T>` or `&[T]`.
 pub mod prelude {
     pub use crate::math::{SliceMath, VecMath};

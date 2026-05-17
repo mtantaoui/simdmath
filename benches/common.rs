@@ -13,10 +13,23 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 // ---------------------------------------------------------------------------
 
 /// Sizes for `f32` benchmarks (F32x8 — 8 lanes).
-pub const SIZES_F32: &[usize] = &[8, 64, 256, 1024];
+pub const SIZES_F32: &[usize] = &[
+    1_024,     // 4 KiB - L1 cache
+    16_384,    // 64 KiB - L1→L2 transition
+    262_144,   // 1 MiB - L2 cache, parallel SIMD threshold
+    1_048_576, // 4 MiB - L3 cache
+    4_194_304, // 16 MiB - L3→RAM transition
+];
 
 /// Sizes for `f64` benchmarks (F64x4 — 4 lanes).
-pub const SIZES_F64: &[usize] = &[4, 64, 256, 1024];
+/// Half the element counts of `SIZES_F32` to cover the same byte-level memory tiers.
+pub const SIZES_F64: &[usize] = &[
+    512,       // 4 KiB - L1 cache
+    8_192,     // 64 KiB - L1→L2 transition
+    131_072,   // 1 MiB - L2 cache, parallel SIMD threshold
+    524_288,   // 4 MiB - L3 cache
+    2_097_152, // 16 MiB - L3→RAM transition
+];
 
 // ---------------------------------------------------------------------------
 // Fixture builders

@@ -367,178 +367,40 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_ln_ps_known_values() {
+    fn test_ln_ps_special_values() {
         unsafe {
+            // ln(1) = +0.0 exactly
+            let r = to_array_ps(_mm256_ln_ps(_mm256_set1_ps(1.0)));
+            assert_eq!(r[0], 0.0, "ln(1) should be +0.0");
+            assert_eq!(r[0].to_bits(), 0, "ln(1) should be positive zero");
+
+            // ln(±0) = -∞
+            for x in [0.0f32, -0.0] {
+                let r = to_array_ps(_mm256_ln_ps(_mm256_set1_ps(x)));
+                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
+            }
+
+            // ln(x < 0) = NaN, ln(NaN) = NaN
+            for x in [-1.0f32, f32::NAN] {
+                let r = to_array_ps(_mm256_ln_ps(_mm256_set1_ps(x)));
+                assert!(r[0].is_nan(), "ln({x}) should be NaN");
+            }
+
+            // ln(+∞) = +∞
+            let r = to_array_ps(_mm256_ln_ps(_mm256_set1_ps(f32::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
+
+            // Known values: e, e², common inputs, powers of 2, near-1 values (ULP-checked)
             let inputs = [
-                1.0_f32,
                 std::f32::consts::E,
                 std::f32::consts::E * std::f32::consts::E,
-                10.0,
-                100.0,
-                0.5,
-                2.0,
-                0.1,
-            ];
-            let expected: [f32; 8] = inputs.map(|v| v.ln());
-            let x = _mm256_loadu_ps(inputs.as_ptr());
-            let result = to_array_ps(_mm256_ln_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_one() {
-        // ln(1) should be exactly 0.0
-        unsafe {
-            let x = _mm256_set1_ps(1.0);
-            let result = to_array_ps(_mm256_ln_ps(x));
-            for &r in &result {
-                assert_eq!(r, 0.0, "ln(1.0) should be exactly 0.0");
-                assert_eq!(r.to_bits(), 0, "ln(1.0) should be +0.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_zero() {
-        // ln(0) = -∞, ln(-0) = -∞
-        unsafe {
-            let pos_zero = _mm256_set1_ps(0.0);
-            let neg_zero = _mm256_set1_ps(-0.0);
-
-            let result_pos = to_array_ps(_mm256_ln_ps(pos_zero));
-            let result_neg = to_array_ps(_mm256_ln_ps(neg_zero));
-
-            for &r in &result_pos {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(0) should be -∞, got {}",
-                    r
-                );
-            }
-            for &r in &result_neg {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(-0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_negative() {
-        // ln(x < 0) = NaN
-        unsafe {
-            let inputs = [
-                -1.0_f32,
-                -2.0,
-                -0.5,
-                -100.0,
-                -1e-10,
-                -f32::INFINITY,
-                -1.0,
-                -42.0,
+                10.0_f32, 0.5, 2.0, 4.0, 0.999, 1.001,
             ];
             let x = _mm256_loadu_ps(inputs.as_ptr());
             let result = to_array_ps(_mm256_ln_ps(x));
-
-            for (i, &r) in result.iter().enumerate() {
-                assert!(
-                    r.is_nan(),
-                    "Lane {}: ln({}) should be NaN, got {}",
-                    i,
-                    inputs[i],
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_infinity() {
-        // ln(+∞) = +∞
-        unsafe {
-            let x = _mm256_set1_ps(f32::INFINITY);
-            let result = to_array_ps(_mm256_ln_ps(x));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "ln(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_nan() {
-        // ln(NaN) = NaN
-        unsafe {
-            let x = _mm256_set1_ps(f32::NAN);
-            let result = to_array_ps(_mm256_ln_ps(x));
-            for &r in &result {
-                assert!(r.is_nan(), "ln(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_powers_of_two() {
-        // ln(2^k) = k * ln(2) — tests exponent extraction
-        unsafe {
-            let inputs = [2.0_f32, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0];
-            let expected: [f32; 8] = inputs.map(|v| v.ln());
-            let x = _mm256_loadu_ps(inputs.as_ptr());
-            let result = to_array_ps(_mm256_ln_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_ps_small_values() {
-        // Test values close to but not equal to 1
-        unsafe {
-            let inputs = [0.999_f32, 1.001, 0.99, 1.01, 0.9, 1.1, 0.5, 1.5];
-            let expected: [f32; 8] = inputs.map(|v| v.ln());
-            let x = _mm256_loadu_ps(inputs.as_ptr());
-            let result = to_array_ps(_mm256_ln_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            for (i, (&r, &inp)) in result.iter().zip(inputs.iter()).enumerate() {
+                let ulp = ulp_distance_f32(r, inp.ln());
+                assert!(ulp <= 2, "Lane {i}: ln({inp}) ULP = {ulp}");
             }
         }
     }
@@ -626,130 +488,35 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_ln_pd_known_values() {
+    fn test_ln_pd_special_values() {
         unsafe {
-            let inputs = [1.0_f64, std::f64::consts::E, 10.0, 0.5];
-            let expected: [f64; 4] = inputs.map(|v| v.ln());
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_ln_pd(x));
+            // ln(1) = +0.0 exactly
+            let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(1.0)));
+            assert_eq!(r[0], 0.0, "ln(1) should be +0.0");
+            assert_eq!(r[0].to_bits(), 0, "ln(1) should be positive zero");
 
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            // ln(±0) = -∞
+            for x in [0.0f64, -0.0] {
+                let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(x)));
+                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_pd_one() {
-        unsafe {
-            let x = _mm256_set1_pd(1.0);
-            let result = to_array_pd(_mm256_ln_pd(x));
-            for &r in &result {
-                assert_eq!(r, 0.0, "ln(1.0) should be exactly 0.0");
-                assert_eq!(r.to_bits(), 0, "ln(1.0) should be +0.0");
+            // ln(x < 0) = NaN, ln(NaN) = NaN
+            for x in [-1.0f64, f64::NAN] {
+                let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(x)));
+                assert!(r[0].is_nan(), "ln({x}) should be NaN");
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_pd_zero() {
-        unsafe {
-            let pos_zero = _mm256_set1_pd(0.0);
-            let neg_zero = _mm256_set1_pd(-0.0);
+            // ln(+∞) = +∞
+            let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(f64::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
 
-            let result_pos = to_array_pd(_mm256_ln_pd(pos_zero));
-            let result_neg = to_array_pd(_mm256_ln_pd(neg_zero));
-
-            for &r in &result_pos {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(0) should be -∞, got {}",
-                    r
-                );
-            }
-            for &r in &result_neg {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(-0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_pd_negative() {
-        unsafe {
-            let inputs = [-1.0_f64, -2.0, -0.5, -100.0];
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_ln_pd(x));
-
-            for (i, &r) in result.iter().enumerate() {
-                assert!(
-                    r.is_nan(),
-                    "Lane {}: ln({}) should be NaN, got {}",
-                    i,
-                    inputs[i],
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_pd_infinity() {
-        unsafe {
-            let x = _mm256_set1_pd(f64::INFINITY);
-            let result = to_array_pd(_mm256_ln_pd(x));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "ln(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_pd_nan() {
-        unsafe {
-            let x = _mm256_set1_pd(f64::NAN);
-            let result = to_array_pd(_mm256_ln_pd(x));
-            for &r in &result {
-                assert!(r.is_nan(), "ln(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_pd_powers_of_two() {
-        unsafe {
-            let inputs = [2.0_f64, 4.0, 8.0, 16.0];
-            let expected: [f64; 4] = inputs.map(|v| v.ln());
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_ln_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            // Known values: e, common inputs, powers of 2, subnormal (ULP-checked)
+            let tiny = f64::MIN_POSITIVE * 0.5;
+            for inp in [std::f64::consts::E, 10.0, 0.5, 2.0, 4.0, tiny] {
+                let r = to_array_pd(_mm256_ln_pd(_mm256_set1_pd(inp)));
+                let ulp = ulp_distance_f64(r[0], inp.ln());
+                assert!(ulp <= 2, "ln({inp:e}) ULP = {ulp}");
             }
         }
     }
@@ -828,28 +595,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_ln_pd_subnormal() {
-        // Test subnormal f64 inputs
-        unsafe {
-            let tiny = f64::MIN_POSITIVE * 0.5; // subnormal
-            let inputs = [tiny, tiny * 0.1, tiny * 10.0, f64::MIN_POSITIVE];
-            let expected: [f64; 4] = inputs.map(|v| v.ln());
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_ln_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({:e}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
 }

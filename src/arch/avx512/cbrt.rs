@@ -452,8 +452,9 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_cbrt_ps_perfect_cubes() {
+    fn test_cbrt_ps_special_values() {
         unsafe {
+            // Perfect cubes
             let inputs: [f32; 16] = [
                 1.0, 8.0, 27.0, 64.0, 125.0, 216.0, 343.0, 512.0, 729.0, 1000.0, 1.0, 8.0, 27.0,
                 64.0, 125.0, 216.0,
@@ -463,7 +464,6 @@ mod tests {
             ];
             let x = _mm512_loadu_ps(inputs.as_ptr());
             let result = to_array_ps(_mm512_cbrt_ps(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_distance_f32(r, e);
                 assert!(
@@ -476,79 +476,52 @@ mod tests {
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_ps_negative_values() {
-        unsafe {
-            let inputs: [f32; 16] = [
+            // Negative values
+            let neg_inputs: [f32; 16] = [
                 -1.0, -8.0, -27.0, -64.0, -125.0, -216.0, -343.0, -512.0, -729.0, -1000.0, -1.0,
                 -8.0, -27.0, -64.0, -125.0, -216.0,
             ];
-            let x = _mm512_loadu_ps(inputs.as_ptr());
+            let x = _mm512_loadu_ps(neg_inputs.as_ptr());
             let result = to_array_ps(_mm512_cbrt_ps(x));
-
             for (i, &r) in result.iter().enumerate() {
-                let expected = inputs[i].cbrt();
-                let ulp = ulp_distance_f32(r, expected);
+                let e = neg_inputs[i].cbrt();
+                let ulp = ulp_distance_f32(r, e);
                 assert!(
                     ulp <= 1,
                     "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
                     i,
-                    inputs[i],
+                    neg_inputs[i],
                     r,
-                    expected,
+                    e,
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_ps_zero() {
-        unsafe {
-            let pos_zero = _mm512_set1_ps(0.0);
-            let neg_zero = _mm512_set1_ps(-0.0);
-
-            let result_pos = to_array_ps(_mm512_cbrt_ps(pos_zero));
-            let result_neg = to_array_ps(_mm512_cbrt_ps(neg_zero));
-
+            // ±0
+            let result_pos = to_array_ps(_mm512_cbrt_ps(_mm512_set1_ps(0.0)));
+            let result_neg = to_array_ps(_mm512_cbrt_ps(_mm512_set1_ps(-0.0)));
             for &r in &result_pos {
                 assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0, "Should be +0.0");
+                assert!(r.to_bits() == 0, "cbrt(+0) should be +0.0");
             }
             for &r in &result_neg {
                 assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0x80000000, "Should be -0.0");
+                assert!(r.to_bits() == 0x80000000, "cbrt(-0) should be -0.0");
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_ps_infinity() {
-        unsafe {
-            let pos_inf = _mm512_set1_ps(f32::INFINITY);
-            let neg_inf = _mm512_set1_ps(f32::NEG_INFINITY);
-
-            let result_pos = to_array_ps(_mm512_cbrt_ps(pos_inf));
-            let result_neg = to_array_ps(_mm512_cbrt_ps(neg_inf));
-
+            // ±∞
+            let result_pos = to_array_ps(_mm512_cbrt_ps(_mm512_set1_ps(f32::INFINITY)));
+            let result_neg = to_array_ps(_mm512_cbrt_ps(_mm512_set1_ps(f32::NEG_INFINITY)));
             for &r in &result_pos {
-                assert!(r.is_infinite() && r > 0.0, "Should be +∞");
+                assert!(r.is_infinite() && r > 0.0, "cbrt(+∞) should be +∞");
             }
             for &r in &result_neg {
-                assert!(r.is_infinite() && r < 0.0, "Should be -∞");
+                assert!(r.is_infinite() && r < 0.0, "cbrt(-∞) should be -∞");
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_ps_nan() {
-        unsafe {
-            let nan = _mm512_set1_ps(f32::NAN);
-            let result = to_array_ps(_mm512_cbrt_ps(nan));
-
+            // NaN → NaN
+            let result = to_array_ps(_mm512_cbrt_ps(_mm512_set1_ps(f32::NAN)));
             for &r in &result {
                 assert!(r.is_nan(), "cbrt(NaN) should be NaN");
             }
@@ -590,13 +563,13 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_cbrt_pd_perfect_cubes() {
+    fn test_cbrt_pd_special_values() {
         unsafe {
+            // Perfect cubes
             let inputs: [f64; 8] = [1.0, 8.0, 27.0, 64.0, 125.0, 216.0, 343.0, 512.0];
             let expected: [f64; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
             let x = _mm512_loadu_pd(inputs.as_ptr());
             let result = to_array_pd(_mm512_cbrt_pd(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_distance_f64(r, e);
                 assert!(
@@ -609,76 +582,49 @@ mod tests {
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_pd_negative_values() {
-        unsafe {
-            let inputs: [f64; 8] = [-1.0, -8.0, -27.0, -64.0, -125.0, -216.0, -343.0, -512.0];
-            let x = _mm512_loadu_pd(inputs.as_ptr());
+            // Negative values
+            let neg_inputs: [f64; 8] = [-1.0, -8.0, -27.0, -64.0, -125.0, -216.0, -343.0, -512.0];
+            let x = _mm512_loadu_pd(neg_inputs.as_ptr());
             let result = to_array_pd(_mm512_cbrt_pd(x));
-
             for (i, &r) in result.iter().enumerate() {
-                let expected = inputs[i].cbrt();
-                let ulp = ulp_distance_f64(r, expected);
+                let e = neg_inputs[i].cbrt();
+                let ulp = ulp_distance_f64(r, e);
                 assert!(
                     ulp <= 1,
                     "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
                     i,
-                    inputs[i],
+                    neg_inputs[i],
                     r,
-                    expected,
+                    e,
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_pd_zero() {
-        unsafe {
-            let pos_zero = _mm512_set1_pd(0.0);
-            let neg_zero = _mm512_set1_pd(-0.0);
-
-            let result_pos = to_array_pd(_mm512_cbrt_pd(pos_zero));
-            let result_neg = to_array_pd(_mm512_cbrt_pd(neg_zero));
-
+            // ±0
+            let result_pos = to_array_pd(_mm512_cbrt_pd(_mm512_set1_pd(0.0)));
+            let result_neg = to_array_pd(_mm512_cbrt_pd(_mm512_set1_pd(-0.0)));
             for &r in &result_pos {
                 assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0, "Should be +0.0");
+                assert!(r.to_bits() == 0, "cbrt(+0) should be +0.0");
             }
             for &r in &result_neg {
                 assert_eq!(r, 0.0);
-                assert!(r.to_bits() == (1_u64 << 63), "Should be -0.0");
+                assert!(r.to_bits() == (1_u64 << 63), "cbrt(-0) should be -0.0");
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_pd_infinity() {
-        unsafe {
-            let pos_inf = _mm512_set1_pd(f64::INFINITY);
-            let neg_inf = _mm512_set1_pd(f64::NEG_INFINITY);
-
-            let result_pos = to_array_pd(_mm512_cbrt_pd(pos_inf));
-            let result_neg = to_array_pd(_mm512_cbrt_pd(neg_inf));
-
+            // ±∞
+            let result_pos = to_array_pd(_mm512_cbrt_pd(_mm512_set1_pd(f64::INFINITY)));
+            let result_neg = to_array_pd(_mm512_cbrt_pd(_mm512_set1_pd(f64::NEG_INFINITY)));
             for &r in &result_pos {
-                assert!(r.is_infinite() && r > 0.0, "Should be +∞");
+                assert!(r.is_infinite() && r > 0.0, "cbrt(+∞) should be +∞");
             }
             for &r in &result_neg {
-                assert!(r.is_infinite() && r < 0.0, "Should be -∞");
+                assert!(r.is_infinite() && r < 0.0, "cbrt(-∞) should be -∞");
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_pd_nan() {
-        unsafe {
-            let nan = _mm512_set1_pd(f64::NAN);
-            let result = to_array_pd(_mm512_cbrt_pd(nan));
-
+            // NaN → NaN
+            let result = to_array_pd(_mm512_cbrt_pd(_mm512_set1_pd(f64::NAN)));
             for &r in &result {
                 assert!(r.is_nan(), "cbrt(NaN) should be NaN");
             }

@@ -330,98 +330,60 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_ln_ps_one() {
+    fn test_ln_ps_special_values() {
         unsafe {
-            let input = _mm512_set1_ps(1.0);
-            let result = extract_ps(_mm512_ln_ps(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "ln(1.0) should be exactly 0.0");
-                assert_eq!(r.to_bits(), 0, "ln(1.0) should be +0.0");
-            }
-        }
-    }
+            // ln(1.0) = +0.0 exactly
+            let r = extract_ps(_mm512_ln_ps(_mm512_set1_ps(1.0)));
+            assert_eq!(r[0], 0.0, "ln(1.0) should be exactly 0.0");
+            assert_eq!(r[0].to_bits(), 0, "ln(1.0) should be +0.0");
 
-    #[test]
-    fn test_ln_ps_zero() {
-        unsafe {
-            let input = _mm512_set1_ps(0.0);
-            let result = extract_ps(_mm512_ln_ps(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(0) = -∞
+            let r = extract_ps(_mm512_ln_ps(_mm512_set1_ps(0.0)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_negative(),
+                "ln(0) should be -∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_ln_ps_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_ps(-0.0);
-            let result = extract_ps(_mm512_ln_ps(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(-0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(-0) = -∞
+            let r = extract_ps(_mm512_ln_ps(_mm512_set1_ps(-0.0)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_negative(),
+                "ln(-0) should be -∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_ln_ps_negative() {
-        unsafe {
-            let inputs = [
+            // ln(negative) = NaN
+            let neg_inputs = [
                 -1.0_f32, -2.0, -0.5, -100.0, -1e-10, -42.0, -1.0, -0.001, -1.0, -2.0, -0.5,
                 -100.0, -1e-10, -42.0, -1.0, -0.001,
             ];
-            let input = _mm512_loadu_ps(inputs.as_ptr());
-            let result = extract_ps(_mm512_ln_ps(input));
+            let x = _mm512_loadu_ps(neg_inputs.as_ptr());
+            let result = extract_ps(_mm512_ln_ps(x));
             for (i, &r) in result.iter().enumerate() {
                 assert!(
                     r.is_nan(),
                     "Lane {}: ln({}) should be NaN, got {}",
                     i,
-                    inputs[i],
+                    neg_inputs[i],
                     r
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_ps_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::INFINITY);
-            let result = extract_ps(_mm512_ln_ps(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "ln(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(+∞) = +∞
+            let r = extract_ps(_mm512_ln_ps(_mm512_set1_ps(f32::INFINITY)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "ln(+∞) should be +∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_ln_ps_nan() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NAN);
-            let result = extract_ps(_mm512_ln_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "ln(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
+            // NaN → NaN
+            let r = extract_ps(_mm512_ln_ps(_mm512_set1_ps(f32::NAN)));
+            assert!(r[0].is_nan(), "ln(NaN) should be NaN, got {}", r[0]);
 
-    #[test]
-    fn test_ln_ps_known_values() {
-        unsafe {
-            let inputs = [
+            // Known values
+            let known_inputs = [
                 1.0_f32,
                 std::f32::consts::E,
                 std::f32::consts::E * std::f32::consts::E,
@@ -439,43 +401,37 @@ mod tests {
                 3.0,
                 7.0,
             ];
-            let expected: [f32; 16] = inputs.map(|v| v.ln());
-            let x = _mm512_loadu_ps(inputs.as_ptr());
+            let known_expected: [f32; 16] = known_inputs.map(|v| v.ln());
+            let x = _mm512_loadu_ps(known_inputs.as_ptr());
             let result = extract_ps(_mm512_ln_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
+            for (i, (&r, &e)) in result.iter().zip(known_expected.iter()).enumerate() {
                 let ulp = ulp_diff_f32(r, e);
                 assert!(
                     ulp <= 2,
                     "Lane {}: ln({}) = {}, expected {}, ULP = {}",
                     i,
-                    inputs[i],
+                    known_inputs[i],
                     r,
                     e,
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_ps_powers_of_two() {
-        unsafe {
-            let inputs = [
-                2.0_f32, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 0.5, 0.25, 0.125,
-                0.0625, 0.03125, 0.015625,
+            // Powers of two
+            let pow2_inputs = [
+                2.0_f32, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 0.5, 0.25,
+                0.125, 0.0625, 0.03125, 0.015625,
             ];
-            let expected: [f32; 16] = inputs.map(|v| v.ln());
-            let x = _mm512_loadu_ps(inputs.as_ptr());
+            let pow2_expected: [f32; 16] = pow2_inputs.map(|v| v.ln());
+            let x = _mm512_loadu_ps(pow2_inputs.as_ptr());
             let result = extract_ps(_mm512_ln_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
+            for (i, (&r, &e)) in result.iter().zip(pow2_expected.iter()).enumerate() {
                 let ulp = ulp_diff_f32(r, e);
                 assert!(
                     ulp <= 2,
                     "Lane {}: ln({}) = {}, expected {}, ULP = {}",
                     i,
-                    inputs[i],
+                    pow2_inputs[i],
                     r,
                     e,
                     ulp
@@ -566,138 +522,113 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_ln_pd_one() {
+    fn test_ln_pd_special_values() {
         unsafe {
-            let input = _mm512_set1_pd(1.0);
-            let result = extract_pd(_mm512_ln_pd(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "ln(1.0) should be exactly 0.0");
-                assert_eq!(r.to_bits(), 0, "ln(1.0) should be +0.0");
-            }
-        }
-    }
+            // ln(1.0) = +0.0 exactly
+            let r = extract_pd(_mm512_ln_pd(_mm512_set1_pd(1.0)));
+            assert_eq!(r[0], 0.0, "ln(1.0) should be exactly 0.0");
+            assert_eq!(r[0].to_bits(), 0, "ln(1.0) should be +0.0");
 
-    #[test]
-    fn test_ln_pd_zero() {
-        unsafe {
-            let input = _mm512_set1_pd(0.0);
-            let result = extract_pd(_mm512_ln_pd(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(0) = -∞
+            let r = extract_pd(_mm512_ln_pd(_mm512_set1_pd(0.0)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_negative(),
+                "ln(0) should be -∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_ln_pd_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_pd(-0.0);
-            let result = extract_pd(_mm512_ln_pd(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(-0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(-0) = -∞
+            let r = extract_pd(_mm512_ln_pd(_mm512_set1_pd(-0.0)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_negative(),
+                "ln(-0) should be -∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_ln_pd_negative() {
-        unsafe {
-            let inputs = [-1.0_f64, -2.0, -0.5, -100.0, -1e-10, -42.0, -1.0, -0.001];
-            let input = _mm512_loadu_pd(inputs.as_ptr());
-            let result = extract_pd(_mm512_ln_pd(input));
+            // ln(negative) = NaN
+            let neg_inputs = [-1.0_f64, -2.0, -0.5, -100.0, -1e-10, -42.0, -1.0, -0.001];
+            let x = _mm512_loadu_pd(neg_inputs.as_ptr());
+            let result = extract_pd(_mm512_ln_pd(x));
             for (i, &r) in result.iter().enumerate() {
                 assert!(
                     r.is_nan(),
                     "Lane {}: ln({}) should be NaN, got {}",
                     i,
-                    inputs[i],
+                    neg_inputs[i],
                     r
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_pd_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::INFINITY);
-            let result = extract_pd(_mm512_ln_pd(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "ln(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(+∞) = +∞
+            let r = extract_pd(_mm512_ln_pd(_mm512_set1_pd(f64::INFINITY)));
+            assert!(
+                r[0].is_infinite() && r[0].is_sign_positive(),
+                "ln(+∞) should be +∞, got {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_ln_pd_nan() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NAN);
-            let result = extract_pd(_mm512_ln_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "ln(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
+            // NaN → NaN
+            let r = extract_pd(_mm512_ln_pd(_mm512_set1_pd(f64::NAN)));
+            assert!(r[0].is_nan(), "ln(NaN) should be NaN, got {}", r[0]);
 
-    #[test]
-    fn test_ln_pd_known_values() {
-        unsafe {
-            let inputs = [
-                1.0_f64,
-                std::f64::consts::E,
-                10.0,
-                0.5,
-                2.0,
-                100.0,
-                0.1,
-                3.0,
-            ];
-            let expected: [f64; 8] = inputs.map(|v| v.ln());
-            let x = _mm512_loadu_pd(inputs.as_ptr());
+            // Known values
+            let known_inputs = [1.0_f64, std::f64::consts::E, 10.0, 0.5, 2.0, 100.0, 0.1, 3.0];
+            let known_expected: [f64; 8] = known_inputs.map(|v| v.ln());
+            let x = _mm512_loadu_pd(known_inputs.as_ptr());
             let result = extract_pd(_mm512_ln_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
+            for (i, (&r, &e)) in result.iter().zip(known_expected.iter()).enumerate() {
                 let ulp = ulp_diff_f64(r, e);
                 assert!(
                     ulp <= 2,
                     "Lane {}: ln({}) = {}, expected {}, ULP = {}",
                     i,
-                    inputs[i],
+                    known_inputs[i],
                     r,
                     e,
                     ulp
                 );
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_pd_powers_of_two() {
-        unsafe {
-            let inputs = [2.0_f64, 4.0, 8.0, 16.0, 0.5, 0.25, 0.125, 0.0625];
-            let expected: [f64; 8] = inputs.map(|v| v.ln());
-            let x = _mm512_loadu_pd(inputs.as_ptr());
+            // Powers of two
+            let pow2_inputs = [2.0_f64, 4.0, 8.0, 16.0, 0.5, 0.25, 0.125, 0.0625];
+            let pow2_expected: [f64; 8] = pow2_inputs.map(|v| v.ln());
+            let x = _mm512_loadu_pd(pow2_inputs.as_ptr());
             let result = extract_pd(_mm512_ln_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
+            for (i, (&r, &e)) in result.iter().zip(pow2_expected.iter()).enumerate() {
                 let ulp = ulp_diff_f64(r, e);
                 assert!(
                     ulp <= 2,
                     "Lane {}: ln({}) = {}, expected {}, ULP = {}",
                     i,
-                    inputs[i],
+                    pow2_inputs[i],
+                    r,
+                    e,
+                    ulp
+                );
+            }
+
+            // Subnormal values
+            let tiny = f64::MIN_POSITIVE * 0.5;
+            let sub_inputs = [
+                tiny,
+                tiny * 0.1,
+                tiny * 10.0,
+                f64::MIN_POSITIVE,
+                tiny * 0.01,
+                tiny * 100.0,
+                f64::MIN_POSITIVE * 2.0,
+                tiny * 0.5,
+            ];
+            let sub_expected: [f64; 8] = sub_inputs.map(|v| v.ln());
+            let x = _mm512_loadu_pd(sub_inputs.as_ptr());
+            let result = extract_pd(_mm512_ln_pd(x));
+            for (i, (&r, &e)) in result.iter().zip(sub_expected.iter()).enumerate() {
+                let ulp = ulp_diff_f64(r, e);
+                assert!(
+                    ulp <= 2,
+                    "Lane {}: ln({:e}) = {}, expected {}, ULP = {}",
+                    i,
+                    sub_inputs[i],
                     r,
                     e,
                     ulp
@@ -780,36 +711,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_ln_pd_subnormal() {
-        unsafe {
-            let tiny = f64::MIN_POSITIVE * 0.5;
-            let inputs = [
-                tiny,
-                tiny * 0.1,
-                tiny * 10.0,
-                f64::MIN_POSITIVE,
-                tiny * 0.01,
-                tiny * 100.0,
-                f64::MIN_POSITIVE * 2.0,
-                tiny * 0.5,
-            ];
-            let expected: [f64; 8] = inputs.map(|v| v.ln());
-            let x = _mm512_loadu_pd(inputs.as_ptr());
-            let result = extract_pd(_mm512_ln_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({:e}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
 }

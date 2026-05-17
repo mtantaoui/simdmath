@@ -268,129 +268,39 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_exp_f32_zero() {
+    fn test_exp_f32_special_values() {
         unsafe {
-            let input = vdupq_n_f32(0.0);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(0) should be exactly 1.0");
+            // exp(±0) = 1 exactly
+            for x in [0.0f32, -0.0] {
+                let r = extract_f32x4(vexp_f32(vdupq_n_f32(x)));
+                assert_eq!(r[0], 1.0, "exp({x}) should be 1.0");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_f32_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f32(-0.0);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(-0) should be exactly 1.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_f32_one() {
-        unsafe {
-            let input = vdupq_n_f32(1.0);
-            let result = extract_f32x4(vexp_f32(input));
-            let expected = 1.0_f32.exp();
-            for &r in &result {
-                let ulp = ulp_diff_f32(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_f32_known_values() {
-        unsafe {
+            // Known finite values (ULP-checked)
             let inputs = [0.0_f32, 1.0, -1.0, 10.0];
-            let expected: [f32; 4] = inputs.map(|v| v.exp());
             let x = vld1q_f32(inputs.as_ptr());
             let result = extract_f32x4(vexp_f32(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            for (i, (&r, &inp)) in result.iter().zip(inputs.iter()).enumerate() {
+                let ulp = ulp_diff_f32(r, inp.exp());
+                assert!(ulp <= 2, "Lane {i}: exp({inp}) ULP = {ulp}");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_f32_overflow() {
-        unsafe {
-            let input = vdupq_n_f32(89.0);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(89) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // Overflow and underflow
+            let r = extract_f32x4(vexp_f32(vdupq_n_f32(89.0)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(89) should be +∞");
 
-    #[test]
-    fn test_exp_f32_underflow() {
-        unsafe {
-            let input = vdupq_n_f32(-104.0);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-104) should be 0.0, got {}", r);
-            }
-        }
-    }
+            let r = extract_f32x4(vexp_f32(vdupq_n_f32(-104.0)));
+            assert_eq!(r[0], 0.0, "exp(-104) should be 0.0");
 
-    #[test]
-    fn test_exp_f32_pos_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::INFINITY);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
+            let r = extract_f32x4(vexp_f32(vdupq_n_f32(f32::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
 
-    #[test]
-    fn test_exp_f32_neg_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NEG_INFINITY);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-∞) should be 0.0, got {}", r);
-            }
-        }
-    }
+            let r = extract_f32x4(vexp_f32(vdupq_n_f32(f32::NEG_INFINITY)));
+            assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
 
-    #[test]
-    fn test_exp_f32_nan() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NAN);
-            let result = extract_f32x4(vexp_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "exp(NaN) should be NaN, got {}", r);
-            }
+            let r = extract_f32x4(vexp_f32(vdupq_n_f32(f32::NAN)));
+            assert!(r[0].is_nan(), "exp(NaN) should be NaN");
         }
     }
 
@@ -476,129 +386,37 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_exp_f64_zero() {
+    fn test_exp_f64_special_values() {
         unsafe {
-            let input = vdupq_n_f64(0.0);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(0) should be exactly 1.0");
+            // exp(±0) = 1 exactly
+            for x in [0.0f64, -0.0] {
+                let r = extract_f64x2(vexp_f64(vdupq_n_f64(x)));
+                assert_eq!(r[0], 1.0, "exp({x}) should be 1.0");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_f64_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f64(-0.0);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert_eq!(r, 1.0, "exp(-0) should be exactly 1.0");
+            // Known finite values (ULP-checked), including near-zero
+            for inp in [1.0f64, -1.0, 1e-15, -1e-15] {
+                let r = extract_f64x2(vexp_f64(vdupq_n_f64(inp)));
+                let ulp = ulp_diff_f64(r[0], inp.exp());
+                assert!(ulp <= 2, "exp({inp}) ULP = {ulp}");
             }
-        }
-    }
 
-    #[test]
-    fn test_exp_f64_one() {
-        unsafe {
-            let input = vdupq_n_f64(1.0);
-            let result = extract_f64x2(vexp_f64(input));
-            let expected = 1.0_f64.exp();
-            for &r in &result {
-                let ulp = ulp_diff_f64(r, expected);
-                assert!(
-                    ulp <= 2,
-                    "exp(1) = {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
-        }
-    }
+            // Overflow and underflow
+            let r = extract_f64x2(vexp_f64(vdupq_n_f64(710.0)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(710) should be +∞");
 
-    #[test]
-    fn test_exp_f64_known_values() {
-        unsafe {
-            let inputs = [1.0_f64, -1.0];
-            let expected: [f64; 2] = inputs.map(|v| v.exp());
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = extract_f64x2(vexp_f64(x));
+            let r = extract_f64x2(vexp_f64(vdupq_n_f64(-746.0)));
+            assert_eq!(r[0], 0.0, "exp(-746) should be 0.0");
 
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
+            // exp(+∞) = +∞, exp(-∞) = 0, exp(NaN) = NaN
+            let r = extract_f64x2(vexp_f64(vdupq_n_f64(f64::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "exp(+∞) should be +∞");
 
-    #[test]
-    fn test_exp_f64_overflow() {
-        unsafe {
-            let input = vdupq_n_f64(710.0);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(710) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            let r = extract_f64x2(vexp_f64(vdupq_n_f64(f64::NEG_INFINITY)));
+            assert_eq!(r[0], 0.0, "exp(-∞) should be 0.0");
 
-    #[test]
-    fn test_exp_f64_underflow() {
-        unsafe {
-            let input = vdupq_n_f64(-746.0);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-746) should be 0.0, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_f64_pos_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::INFINITY);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "exp(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_f64_neg_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NEG_INFINITY);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "exp(-∞) should be 0.0, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_exp_f64_nan() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NAN);
-            let result = extract_f64x2(vexp_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "exp(NaN) should be NaN, got {}", r);
-            }
+            let r = extract_f64x2(vexp_f64(vdupq_n_f64(f64::NAN)));
+            assert!(r[0].is_nan(), "exp(NaN) should be NaN");
         }
     }
 
@@ -679,26 +497,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_exp_f64_near_zero() {
-        unsafe {
-            let inputs = [1e-15_f64, -1e-15];
-            let expected: [f64; 2] = inputs.map(|v| v.exp());
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = extract_f64x2(vexp_f64(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: exp({:e}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
 }

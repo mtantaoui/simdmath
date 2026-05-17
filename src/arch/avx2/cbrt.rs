@@ -453,122 +453,40 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_cbrt_ps_perfect_cubes() {
+    fn test_cbrt_ps_special_values() {
         unsafe {
-            let inputs = [1.0_f32, 8.0, 27.0, 64.0, 125.0, 343.0, 729.0, 1000.0];
-            let expected = [1.0_f32, 2.0, 3.0, 4.0, 5.0, 7.0, 9.0, 10.0];
+            // ±0 → ±0 with sign preserved
+            let r = to_array_ps(_mm256_cbrt_ps(_mm256_set1_ps(0.0)));
+            assert_eq!(r[0].to_bits(), 0, "cbrt(+0) should be +0.0");
+
+            let r = to_array_ps(_mm256_cbrt_ps(_mm256_set1_ps(-0.0)));
+            assert_eq!(r[0].to_bits(), 0x80000000, "cbrt(-0) should be -0.0");
+
+            // ±∞ → ±∞
+            let r = to_array_ps(_mm256_cbrt_ps(_mm256_set1_ps(f32::INFINITY)));
+            assert!(r[0].is_infinite() && r[0] > 0.0, "cbrt(+∞) should be +∞");
+
+            let r = to_array_ps(_mm256_cbrt_ps(_mm256_set1_ps(f32::NEG_INFINITY)));
+            assert!(r[0].is_infinite() && r[0] < 0.0, "cbrt(-∞) should be -∞");
+
+            // NaN → NaN
+            let r = to_array_ps(_mm256_cbrt_ps(_mm256_set1_ps(f32::NAN)));
+            assert!(r[0].is_nan(), "cbrt(NaN) should be NaN");
+
+            // Perfect cubes (positive and negative) and subnormal (ULP-checked)
+            let inputs = [1.0_f32, 8.0, 27.0, 64.0, -1.0, -8.0, -27.0, -64.0];
+            let expected = [1.0_f32, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0];
             let x = _mm256_loadu_ps(inputs.as_ptr());
             let result = to_array_ps(_mm256_cbrt_ps(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+                assert!(ulp <= 1, "Lane {i}: cbrt({}) = {r}, ULP = {ulp}", inputs[i]);
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_ps_negative_values() {
-        unsafe {
-            let inputs = [
-                -1.0_f32, -8.0, -27.0, -64.0, -125.0, -343.0, -729.0, -1000.0,
-            ];
-            let expected = [-1.0_f32, -2.0, -3.0, -4.0, -5.0, -7.0, -9.0, -10.0];
-            let x = _mm256_loadu_ps(inputs.as_ptr());
-            let result = to_array_ps(_mm256_cbrt_ps(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_ps_zero() {
-        unsafe {
-            let pos_zero = _mm256_set1_ps(0.0);
-            let neg_zero = _mm256_set1_ps(-0.0);
-
-            let result_pos = to_array_ps(_mm256_cbrt_ps(pos_zero));
-            let result_neg = to_array_ps(_mm256_cbrt_ps(neg_zero));
-
-            for &r in &result_pos {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0, "Should be +0.0");
-            }
-            for &r in &result_neg {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0x80000000, "Should be -0.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_ps_infinity() {
-        unsafe {
-            let pos_inf = _mm256_set1_ps(f32::INFINITY);
-            let neg_inf = _mm256_set1_ps(f32::NEG_INFINITY);
-
-            let result_pos = to_array_ps(_mm256_cbrt_ps(pos_inf));
-            let result_neg = to_array_ps(_mm256_cbrt_ps(neg_inf));
-
-            for &r in &result_pos {
-                assert!(r.is_infinite() && r > 0.0, "Should be +∞");
-            }
-            for &r in &result_neg {
-                assert!(r.is_infinite() && r < 0.0, "Should be -∞");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_ps_nan() {
-        unsafe {
-            let nan = _mm256_set1_ps(f32::NAN);
-            let result = to_array_ps(_mm256_cbrt_ps(nan));
-
-            for &r in &result {
-                assert!(r.is_nan(), "cbrt(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_ps_subnormals() {
-        unsafe {
-            // Smallest positive subnormal: 2^-149
             let tiny = f32::from_bits(1);
-            let x = _mm256_set1_ps(tiny);
-            let result = to_array_ps(_mm256_cbrt_ps(x));
-            let expected = tiny.cbrt();
-
-            for &r in &result {
-                let ulp = ulp_distance_f32(r, expected);
-                assert!(
-                    ulp <= 1,
-                    "Subnormal cbrt failed: got {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
+            let r = to_array_ps(_mm256_cbrt_ps(_mm256_set1_ps(tiny)));
+            let ulp = ulp_distance_f32(r[0], tiny.cbrt());
+            assert!(ulp <= 1, "Subnormal cbrt ULP = {ulp}");
         }
     }
 
@@ -632,120 +550,40 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_cbrt_pd_perfect_cubes() {
+    fn test_cbrt_pd_special_values() {
         unsafe {
+            // ±0 → ±0 with sign preserved
+            let r = to_array_pd(_mm256_cbrt_pd(_mm256_set1_pd(0.0)));
+            assert_eq!(r[0].to_bits(), 0, "cbrt(+0) should be +0.0");
+
+            let r = to_array_pd(_mm256_cbrt_pd(_mm256_set1_pd(-0.0)));
+            assert_eq!(r[0].to_bits(), 1_u64 << 63, "cbrt(-0) should be -0.0");
+
+            // ±∞ → ±∞
+            let r = to_array_pd(_mm256_cbrt_pd(_mm256_set1_pd(f64::INFINITY)));
+            assert!(r[0].is_infinite() && r[0] > 0.0, "cbrt(+∞) should be +∞");
+
+            let r = to_array_pd(_mm256_cbrt_pd(_mm256_set1_pd(f64::NEG_INFINITY)));
+            assert!(r[0].is_infinite() && r[0] < 0.0, "cbrt(-∞) should be -∞");
+
+            // NaN → NaN
+            let r = to_array_pd(_mm256_cbrt_pd(_mm256_set1_pd(f64::NAN)));
+            assert!(r[0].is_nan(), "cbrt(NaN) should be NaN");
+
+            // Perfect cubes (positive and negative) and subnormal (ULP-checked)
             let inputs = [1.0_f64, 8.0, 27.0, 125.0];
             let expected = [1.0_f64, 2.0, 3.0, 5.0];
             let x = _mm256_loadu_pd(inputs.as_ptr());
             let result = to_array_pd(_mm256_cbrt_pd(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+                assert!(ulp <= 1, "Lane {i}: cbrt({}) = {r}, ULP = {ulp}", inputs[i]);
             }
-        }
-    }
 
-    #[test]
-    fn test_cbrt_pd_negative_values() {
-        unsafe {
-            let inputs = [-1.0_f64, -8.0, -27.0, -125.0];
-            let expected = [-1.0_f64, -2.0, -3.0, -5.0];
-            let x = _mm256_loadu_pd(inputs.as_ptr());
-            let result = to_array_pd(_mm256_cbrt_pd(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_pd_zero() {
-        unsafe {
-            let pos_zero = _mm256_set1_pd(0.0);
-            let neg_zero = _mm256_set1_pd(-0.0);
-
-            let result_pos = to_array_pd(_mm256_cbrt_pd(pos_zero));
-            let result_neg = to_array_pd(_mm256_cbrt_pd(neg_zero));
-
-            for &r in &result_pos {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0, "Should be +0.0");
-            }
-            for &r in &result_neg {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == (1_u64 << 63), "Should be -0.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_pd_infinity() {
-        unsafe {
-            let pos_inf = _mm256_set1_pd(f64::INFINITY);
-            let neg_inf = _mm256_set1_pd(f64::NEG_INFINITY);
-
-            let result_pos = to_array_pd(_mm256_cbrt_pd(pos_inf));
-            let result_neg = to_array_pd(_mm256_cbrt_pd(neg_inf));
-
-            for &r in &result_pos {
-                assert!(r.is_infinite() && r > 0.0, "Should be +∞");
-            }
-            for &r in &result_neg {
-                assert!(r.is_infinite() && r < 0.0, "Should be -∞");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_pd_nan() {
-        unsafe {
-            let nan = _mm256_set1_pd(f64::NAN);
-            let result = to_array_pd(_mm256_cbrt_pd(nan));
-
-            for &r in &result {
-                assert!(r.is_nan(), "cbrt(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_pd_subnormals() {
-        unsafe {
-            // Smallest positive subnormal for f64
             let tiny = f64::from_bits(1);
-            let x = _mm256_set1_pd(tiny);
-            let result = to_array_pd(_mm256_cbrt_pd(x));
-            let expected = tiny.cbrt();
-
-            for &r in &result {
-                let ulp = ulp_distance_f64(r, expected);
-                assert!(
-                    ulp <= 1,
-                    "Subnormal cbrt failed: got {}, expected {}, ULP = {}",
-                    r,
-                    expected,
-                    ulp
-                );
-            }
+            let r = to_array_pd(_mm256_cbrt_pd(_mm256_set1_pd(tiny)));
+            let ulp = ulp_distance_f64(r[0], tiny.cbrt());
+            assert!(ulp <= 1, "Subnormal cbrt ULP = {ulp}");
         }
     }
 

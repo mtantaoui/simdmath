@@ -412,98 +412,32 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_cos_f32_zero() {
+    fn test_cos_f32_special_values() {
         unsafe {
-            let input = vdupq_n_f32(0.0);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-6, "cos(0) = {}, expected 1.0", r);
+            // cos(±0) = 1
+            for x in [0.0f32, -0.0] {
+                let r = extract_f32(vcos_f32(vdupq_n_f32(x)));
+                assert!((r[0] - 1.0).abs() < 1e-6, "cos({x}) = {}", r[0]);
             }
-        }
-    }
 
-    #[test]
-    fn test_cos_f32_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f32(-0.0);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-6, "cos(-0) = {}, expected 1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_f32(vcos_f32(vdupq_n_f32(std::f32::consts::PI)));
+            assert!((r[0] + 1.0).abs() < 1e-5, "cos(π) = {}", r[0]);
 
-    #[test]
-    fn test_cos_f32_pi() {
-        unsafe {
-            let pi = std::f32::consts::PI;
-            let input = vdupq_n_f32(pi);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!((r - (-1.0)).abs() < 1e-5, "cos(π) = {}, expected -1.0", r);
-            }
-        }
-    }
+            let r = extract_f32(vcos_f32(vdupq_n_f32(std::f32::consts::FRAC_PI_2)));
+            assert!(r[0].abs() < 1e-5, "cos(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_cos_f32_pi_over_2() {
-        unsafe {
-            let pi_2 = std::f32::consts::FRAC_PI_2;
-            let input = vdupq_n_f32(pi_2);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-5, "cos(π/2) = {}, expected 0.0", r);
-            }
-        }
-    }
+            let r = extract_f32(vcos_f32(vdupq_n_f32(std::f32::consts::FRAC_PI_4)));
+            assert!(
+                (r[0] - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-5,
+                "cos(π/4) = {}",
+                r[0]
+            );
 
-    #[test]
-    fn test_cos_f32_pi_over_4() {
-        unsafe {
-            let pi_4 = std::f32::consts::FRAC_PI_4;
-            let input = vdupq_n_f32(pi_4);
-            let result = extract_f32(vcos_f32(input));
-            let expected = std::f32::consts::FRAC_1_SQRT_2;
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-5,
-                    "cos(π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_f32_nan() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NAN);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_f32_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::INFINITY);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(+∞) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_f32_negative_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NEG_INFINITY);
-            let result = extract_f32(vcos_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(-∞) should be NaN, got {}", r);
+            // NaN and infinities → NaN
+            for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let r = extract_f32(vcos_f32(vdupq_n_f32(x)));
+                assert!(r[0].is_nan(), "cos({x}) should be NaN, got {}", r[0]);
             }
         }
     }
@@ -562,80 +496,25 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_cos_f64_zero() {
+    fn test_cos_f64_special_values() {
         unsafe {
-            let input = vdupq_n_f64(0.0);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-14, "cos(0) = {}, expected 1.0", r);
+            // cos(±0) = 1
+            for x in [0.0f64, -0.0] {
+                let r = extract_f64(vcos_f64(vdupq_n_f64(x)));
+                assert!((r[0] - 1.0).abs() < 1e-14, "cos({x}) = {}", r[0]);
             }
-        }
-    }
 
-    #[test]
-    fn test_cos_f64_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f64(-0.0);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-14, "cos(-0) = {}, expected 1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_f64(vcos_f64(vdupq_n_f64(std::f64::consts::PI)));
+            assert!((r[0] + 1.0).abs() < 1e-14, "cos(π) = {}", r[0]);
 
-    #[test]
-    fn test_cos_f64_pi() {
-        unsafe {
-            let pi = std::f64::consts::PI;
-            let input = vdupq_n_f64(pi);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!((r - (-1.0)).abs() < 1e-14, "cos(π) = {}, expected -1.0", r);
-            }
-        }
-    }
+            let r = extract_f64(vcos_f64(vdupq_n_f64(std::f64::consts::FRAC_PI_2)));
+            assert!(r[0].abs() < 1e-14, "cos(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_cos_f64_pi_over_2() {
-        unsafe {
-            let pi_2 = std::f64::consts::FRAC_PI_2;
-            let input = vdupq_n_f64(pi_2);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-14, "cos(π/2) = {}, expected 0.0", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_f64_nan() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NAN);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_f64_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::INFINITY);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(+∞) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_f64_negative_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NEG_INFINITY);
-            let result = extract_f64(vcos_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(-∞) should be NaN, got {}", r);
+            // NaN and infinities → NaN
+            for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let r = extract_f64(vcos_f64(vdupq_n_f64(x)));
+                assert!(r[0].is_nan(), "cos({x}) should be NaN, got {}", r[0]);
             }
         }
     }

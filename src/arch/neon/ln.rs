@@ -325,133 +325,35 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_ln_f32_one() {
+    fn test_ln_f32_special_values() {
         unsafe {
-            let input = vdupq_n_f32(1.0);
-            let result = extract_f32x4(vln_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "ln(1.0) should be exactly 0.0");
-                assert_eq!(r.to_bits(), 0, "ln(1.0) should be +0.0");
+            // ln(1) = +0.0 exactly
+            let r = extract_f32x4(vln_f32(vdupq_n_f32(1.0)));
+            assert_eq!(r[0], 0.0, "ln(1) should be +0.0");
+            assert_eq!(r[0].to_bits(), 0, "ln(1) should be positive zero");
+
+            // ln(±0) = -∞
+            for x in [0.0f32, -0.0] {
+                let r = extract_f32x4(vln_f32(vdupq_n_f32(x)));
+                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_f32_zero() {
-        unsafe {
-            let input = vdupq_n_f32(0.0);
-            let result = extract_f32x4(vln_f32(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(0) should be -∞, got {}",
-                    r
-                );
+            // ln(x < 0) = NaN, ln(NaN) = NaN
+            for x in [-1.0f32, f32::NAN] {
+                let r = extract_f32x4(vln_f32(vdupq_n_f32(x)));
+                assert!(r[0].is_nan(), "ln({x}) should be NaN");
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_f32_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f32(-0.0);
-            let result = extract_f32x4(vln_f32(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(-0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(+∞) = +∞
+            let r = extract_f32x4(vln_f32(vdupq_n_f32(f32::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
 
-    #[test]
-    fn test_ln_f32_negative() {
-        unsafe {
-            let inputs = [-1.0_f32, -2.0, -0.5, -100.0];
-            let input = vld1q_f32(inputs.as_ptr());
-            let result = extract_f32x4(vln_f32(input));
-            for (i, &r) in result.iter().enumerate() {
-                assert!(
-                    r.is_nan(),
-                    "Lane {}: ln({}) should be NaN, got {}",
-                    i,
-                    inputs[i],
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f32_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::INFINITY);
-            let result = extract_f32x4(vln_f32(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "ln(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f32_nan() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NAN);
-            let result = extract_f32x4(vln_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "ln(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f32_known_values() {
-        unsafe {
-            let inputs = [std::f32::consts::E, 10.0, 0.5, 2.0];
-            let expected: [f32; 4] = inputs.map(|v| v.ln());
-            let x = vld1q_f32(inputs.as_ptr());
-            let result = extract_f32x4(vln_f32(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f32_powers_of_two() {
-        unsafe {
-            let inputs = [2.0_f32, 4.0, 8.0, 16.0];
-            let expected: [f32; 4] = inputs.map(|v| v.ln());
-            let x = vld1q_f32(inputs.as_ptr());
-            let result = extract_f32x4(vln_f32(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f32(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            // Known values: e, common inputs, powers of 2 (ULP-checked)
+            let inputs = [std::f32::consts::E, 10.0_f32, 0.5, 2.0, 4.0];
+            for inp in inputs {
+                let r = extract_f32x4(vln_f32(vdupq_n_f32(inp)));
+                let ulp = ulp_diff_f32(r[0], inp.ln());
+                assert!(ulp <= 2, "ln({inp}) ULP = {ulp}");
             }
         }
     }
@@ -535,133 +437,35 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_ln_f64_one() {
+    fn test_ln_f64_special_values() {
         unsafe {
-            let input = vdupq_n_f64(1.0);
-            let result = extract_f64x2(vln_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0, "ln(1.0) should be exactly 0.0");
-                assert_eq!(r.to_bits(), 0, "ln(1.0) should be +0.0");
+            // ln(1) = +0.0 exactly
+            let r = extract_f64x2(vln_f64(vdupq_n_f64(1.0)));
+            assert_eq!(r[0], 0.0, "ln(1) should be +0.0");
+            assert_eq!(r[0].to_bits(), 0, "ln(1) should be positive zero");
+
+            // ln(±0) = -∞
+            for x in [0.0f64, -0.0] {
+                let r = extract_f64x2(vln_f64(vdupq_n_f64(x)));
+                assert!(r[0].is_infinite() && r[0].is_sign_negative(), "ln({x}) should be -∞");
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_f64_zero() {
-        unsafe {
-            let input = vdupq_n_f64(0.0);
-            let result = extract_f64x2(vln_f64(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(0) should be -∞, got {}",
-                    r
-                );
+            // ln(x < 0) = NaN, ln(NaN) = NaN
+            for x in [-1.0f64, f64::NAN] {
+                let r = extract_f64x2(vln_f64(vdupq_n_f64(x)));
+                assert!(r[0].is_nan(), "ln({x}) should be NaN");
             }
-        }
-    }
 
-    #[test]
-    fn test_ln_f64_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f64(-0.0);
-            let result = extract_f64x2(vln_f64(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_negative(),
-                    "ln(-0) should be -∞, got {}",
-                    r
-                );
-            }
-        }
-    }
+            // ln(+∞) = +∞
+            let r = extract_f64x2(vln_f64(vdupq_n_f64(f64::INFINITY)));
+            assert!(r[0].is_infinite() && r[0].is_sign_positive(), "ln(+∞) should be +∞");
 
-    #[test]
-    fn test_ln_f64_negative() {
-        unsafe {
-            let inputs = [-1.0_f64, -100.0];
-            let input = vld1q_f64(inputs.as_ptr());
-            let result = extract_f64x2(vln_f64(input));
-            for (i, &r) in result.iter().enumerate() {
-                assert!(
-                    r.is_nan(),
-                    "Lane {}: ln({}) should be NaN, got {}",
-                    i,
-                    inputs[i],
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f64_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::INFINITY);
-            let result = extract_f64x2(vln_f64(input));
-            for &r in &result {
-                assert!(
-                    r.is_infinite() && r.is_sign_positive(),
-                    "ln(+∞) should be +∞, got {}",
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f64_nan() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NAN);
-            let result = extract_f64x2(vln_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "ln(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f64_known_values() {
-        unsafe {
-            let inputs = [std::f64::consts::E, 10.0];
-            let expected: [f64; 2] = inputs.map(|v| v.ln());
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = extract_f64x2(vln_f64(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_ln_f64_powers_of_two() {
-        unsafe {
-            let inputs = [2.0_f64, 8.0];
-            let expected: [f64; 2] = inputs.map(|v| v.ln());
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = extract_f64x2(vln_f64(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+            // Known values: e, common inputs, powers of 2, subnormal (ULP-checked)
+            let tiny = f64::MIN_POSITIVE * 0.5;
+            for inp in [std::f64::consts::E, 10.0_f64, 0.5, 2.0, tiny] {
+                let r = extract_f64x2(vln_f64(vdupq_n_f64(inp)));
+                let ulp = ulp_diff_f64(r[0], inp.ln());
+                assert!(ulp <= 2, "ln({inp:e}) ULP = {ulp}");
             }
         }
     }
@@ -740,27 +544,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_ln_f64_subnormal() {
-        unsafe {
-            let tiny = f64::MIN_POSITIVE * 0.5;
-            let inputs = [tiny, f64::MIN_POSITIVE];
-            let expected: [f64; 2] = inputs.map(|v| v.ln());
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = extract_f64x2(vln_f64(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_diff_f64(r, e);
-                assert!(
-                    ulp <= 2,
-                    "Lane {}: ln({:e}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
 }

@@ -418,97 +418,31 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_sin_f32_zero() {
+    fn test_sin_f32_special_values() {
         unsafe {
-            let input = vdupq_n_f32(0.0);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_positive());
-            }
-        }
-    }
+            // ±0 → ±0 with sign preserved
+            let r = extract_f32(vsin_f32(vdupq_n_f32(0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_positive());
 
-    #[test]
-    fn test_sin_f32_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f32(-0.0);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_negative());
-            }
-        }
-    }
+            let r = extract_f32(vsin_f32(vdupq_n_f32(-0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_negative());
 
-    #[test]
-    fn test_sin_f32_pi_over_2() {
-        unsafe {
-            let input = vdupq_n_f32(PI32 / 2.0);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-6, "sin(π/2) = {}, expected ~1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_f32(vsin_f32(vdupq_n_f32(PI32 / 2.0)));
+            assert!((r[0] - 1.0).abs() < 1e-6, "sin(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_sin_f32_pi() {
-        unsafe {
-            let input = vdupq_n_f32(PI32);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-6, "sin(π) = {}, expected ~0.0", r);
-            }
-        }
-    }
+            let r = extract_f32(vsin_f32(vdupq_n_f32(PI32)));
+            assert!(r[0].abs() < 1e-6, "sin(π) = {}", r[0]);
 
-    #[test]
-    fn test_sin_f32_pi_over_4() {
-        unsafe {
-            let input = vdupq_n_f32(PI32 / 4.0);
-            let result = extract_f32(vsin_f32(input));
-            let expected = (PI32 / 4.0).sin();
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-6,
-                    "sin(π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
+            let r = extract_f32(vsin_f32(vdupq_n_f32(PI32 / 4.0)));
+            assert!((r[0] - (PI32 / 4.0).sin()).abs() < 1e-6, "sin(π/4) = {}", r[0]);
 
-    #[test]
-    fn test_sin_f32_nan() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NAN);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_f32_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::INFINITY);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(∞) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_f32_negative_infinity() {
-        unsafe {
-            let input = vdupq_n_f32(f32::NEG_INFINITY);
-            let result = extract_f32(vsin_f32(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(-∞) should be NaN");
+            // NaN and infinities → NaN
+            for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let r = extract_f32(vsin_f32(vdupq_n_f32(x)));
+                assert!(r[0].is_nan(), "sin({x}) should be NaN, got {}", r[0]);
             }
         }
     }
@@ -563,80 +497,28 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_sin_f64_zero() {
+    fn test_sin_f64_special_values() {
         unsafe {
-            let input = vdupq_n_f64(0.0);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_positive());
-            }
-        }
-    }
+            // ±0 → ±0 with sign preserved
+            let r = extract_f64(vsin_f64(vdupq_n_f64(0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_positive());
 
-    #[test]
-    fn test_sin_f64_negative_zero() {
-        unsafe {
-            let input = vdupq_n_f64(-0.0);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert_eq!(r, 0.0);
-                assert!(r.is_sign_negative());
-            }
-        }
-    }
+            let r = extract_f64(vsin_f64(vdupq_n_f64(-0.0)));
+            assert_eq!(r[0], 0.0);
+            assert!(r[0].is_sign_negative());
 
-    #[test]
-    fn test_sin_f64_pi_over_2() {
-        unsafe {
-            let input = vdupq_n_f64(PI64 / 2.0);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-14, "sin(π/2) = {}, expected ~1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_f64(vsin_f64(vdupq_n_f64(PI64 / 2.0)));
+            assert!((r[0] - 1.0).abs() < 1e-14, "sin(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_sin_f64_pi() {
-        unsafe {
-            let input = vdupq_n_f64(PI64);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-14, "sin(π) = {}, expected ~0.0", r);
-            }
-        }
-    }
+            let r = extract_f64(vsin_f64(vdupq_n_f64(PI64)));
+            assert!(r[0].abs() < 1e-14, "sin(π) = {}", r[0]);
 
-    #[test]
-    fn test_sin_f64_nan() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NAN);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(NaN) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_f64_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::INFINITY);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(∞) should be NaN");
-            }
-        }
-    }
-
-    #[test]
-    fn test_sin_f64_negative_infinity() {
-        unsafe {
-            let input = vdupq_n_f64(f64::NEG_INFINITY);
-            let result = extract_f64(vsin_f64(input));
-            for &r in &result {
-                assert!(r.is_nan(), "sin(-∞) should be NaN");
+            // NaN and infinities → NaN
+            for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let r = extract_f64(vsin_f64(vdupq_n_f64(x)));
+                assert!(r[0].is_nan(), "sin({x}) should be NaN, got {}", r[0]);
             }
         }
     }

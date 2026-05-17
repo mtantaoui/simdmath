@@ -420,98 +420,35 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_cos_ps_zero() {
+    fn test_cos_ps_special_values() {
         unsafe {
-            let input = _mm512_set1_ps(0.0);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-6, "cos(0) = {}, expected 1.0", r);
-            }
-        }
-    }
+            // ±0 → 1.0
+            let r = extract_ps(_mm512_cos_ps(_mm512_set1_ps(0.0)));
+            assert!((r[0] - 1.0).abs() < 1e-6, "cos(0) = {}", r[0]);
 
-    #[test]
-    fn test_cos_ps_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_ps(-0.0);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-6, "cos(-0) = {}, expected 1.0", r);
-            }
-        }
-    }
+            let r = extract_ps(_mm512_cos_ps(_mm512_set1_ps(-0.0)));
+            assert!((r[0] - 1.0).abs() < 1e-6, "cos(-0) = {}", r[0]);
 
-    #[test]
-    fn test_cos_ps_pi() {
-        unsafe {
-            let pi = std::f32::consts::PI;
-            let input = _mm512_set1_ps(pi);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!((r - (-1.0)).abs() < 1e-5, "cos(π) = {}, expected -1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_ps(_mm512_cos_ps(_mm512_set1_ps(std::f32::consts::PI)));
+            assert!((r[0] - (-1.0)).abs() < 1e-5, "cos(π) = {}", r[0]);
 
-    #[test]
-    fn test_cos_ps_pi_over_2() {
-        unsafe {
-            let pi_2 = std::f32::consts::FRAC_PI_2;
-            let input = _mm512_set1_ps(pi_2);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-5, "cos(π/2) = {}, expected 0.0", r);
-            }
-        }
-    }
+            let r = extract_ps(_mm512_cos_ps(_mm512_set1_ps(std::f32::consts::FRAC_PI_2)));
+            assert!(r[0].abs() < 1e-5, "cos(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_cos_ps_pi_over_4() {
-        unsafe {
-            let pi_4 = std::f32::consts::FRAC_PI_4;
-            let input = _mm512_set1_ps(pi_4);
-            let result = extract_ps(_mm512_cos_ps(input));
+            let r = extract_ps(_mm512_cos_ps(_mm512_set1_ps(std::f32::consts::FRAC_PI_4)));
             let expected = std::f32::consts::FRAC_1_SQRT_2;
-            for &r in &result {
-                assert!(
-                    (r - expected).abs() < 1e-5,
-                    "cos(π/4) = {}, expected {}",
-                    r,
-                    expected
-                );
-            }
-        }
-    }
+            assert!(
+                (r[0] - expected).abs() < 1e-5,
+                "cos(π/4) = {}, expected {}",
+                r[0],
+                expected
+            );
 
-    #[test]
-    fn test_cos_ps_nan() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NAN);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_ps_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::INFINITY);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(+∞) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_ps_negative_infinity() {
-        unsafe {
-            let input = _mm512_set1_ps(f32::NEG_INFINITY);
-            let result = extract_ps(_mm512_cos_ps(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(-∞) should be NaN, got {}", r);
+            // NaN and infinities → NaN
+            for x in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let r = extract_ps(_mm512_cos_ps(_mm512_set1_ps(x)));
+                assert!(r[0].is_nan(), "cos({x}) should be NaN, got {}", r[0]);
             }
         }
     }
@@ -599,80 +536,26 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_cos_pd_zero() {
+    fn test_cos_pd_special_values() {
         unsafe {
-            let input = _mm512_set1_pd(0.0);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-14, "cos(0) = {}, expected 1.0", r);
-            }
-        }
-    }
+            // ±0 → 1.0
+            let r = extract_pd(_mm512_cos_pd(_mm512_set1_pd(0.0)));
+            assert!((r[0] - 1.0).abs() < 1e-14, "cos(0) = {}", r[0]);
 
-    #[test]
-    fn test_cos_pd_negative_zero() {
-        unsafe {
-            let input = _mm512_set1_pd(-0.0);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!((r - 1.0).abs() < 1e-14, "cos(-0) = {}, expected 1.0", r);
-            }
-        }
-    }
+            let r = extract_pd(_mm512_cos_pd(_mm512_set1_pd(-0.0)));
+            assert!((r[0] - 1.0).abs() < 1e-14, "cos(-0) = {}", r[0]);
 
-    #[test]
-    fn test_cos_pd_pi() {
-        unsafe {
-            let pi = std::f64::consts::PI;
-            let input = _mm512_set1_pd(pi);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!((r - (-1.0)).abs() < 1e-14, "cos(π) = {}, expected -1.0", r);
-            }
-        }
-    }
+            // Known values
+            let r = extract_pd(_mm512_cos_pd(_mm512_set1_pd(std::f64::consts::PI)));
+            assert!((r[0] - (-1.0)).abs() < 1e-14, "cos(π) = {}", r[0]);
 
-    #[test]
-    fn test_cos_pd_pi_over_2() {
-        unsafe {
-            let pi_2 = std::f64::consts::FRAC_PI_2;
-            let input = _mm512_set1_pd(pi_2);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!(r.abs() < 1e-14, "cos(π/2) = {}, expected 0.0", r);
-            }
-        }
-    }
+            let r = extract_pd(_mm512_cos_pd(_mm512_set1_pd(std::f64::consts::FRAC_PI_2)));
+            assert!(r[0].abs() < 1e-14, "cos(π/2) = {}", r[0]);
 
-    #[test]
-    fn test_cos_pd_nan() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NAN);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(NaN) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_pd_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::INFINITY);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(+∞) should be NaN, got {}", r);
-            }
-        }
-    }
-
-    #[test]
-    fn test_cos_pd_negative_infinity() {
-        unsafe {
-            let input = _mm512_set1_pd(f64::NEG_INFINITY);
-            let result = extract_pd(_mm512_cos_pd(input));
-            for &r in &result {
-                assert!(r.is_nan(), "cos(-∞) should be NaN, got {}", r);
+            // NaN and infinities → NaN
+            for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let r = extract_pd(_mm512_cos_pd(_mm512_set1_pd(x)));
+                assert!(r[0].is_nan(), "cos({x}) should be NaN, got {}", r[0]);
             }
         }
     }

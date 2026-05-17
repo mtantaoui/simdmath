@@ -445,97 +445,39 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_cbrt_f32_perfect_cubes() {
+    fn test_cbrt_f32_special_values() {
         unsafe {
+            // ±0 → ±0 with sign preserved
+            let r = to_array_f32(vcbrt_f32(vdupq_n_f32(0.0)));
+            assert_eq!(r[0].to_bits(), 0, "cbrt(+0) should be +0.0");
+
+            let r = to_array_f32(vcbrt_f32(vdupq_n_f32(-0.0)));
+            assert_eq!(r[0].to_bits(), 0x80000000, "cbrt(-0) should be -0.0");
+
+            // ±∞ → ±∞
+            let r = to_array_f32(vcbrt_f32(vdupq_n_f32(f32::INFINITY)));
+            assert!(r[0].is_infinite() && r[0] > 0.0, "cbrt(+∞) should be +∞");
+
+            let r = to_array_f32(vcbrt_f32(vdupq_n_f32(f32::NEG_INFINITY)));
+            assert!(r[0].is_infinite() && r[0] < 0.0, "cbrt(-∞) should be -∞");
+
+            // NaN → NaN
+            let r = to_array_f32(vcbrt_f32(vdupq_n_f32(f32::NAN)));
+            assert!(r[0].is_nan(), "cbrt(NaN) should be NaN");
+
+            // Perfect cubes (positive and negative), ULP-checked
             let inputs = [1.0_f32, 8.0, 27.0, 64.0];
             let expected = [1.0_f32, 2.0, 3.0, 4.0];
             let x = vld1q_f32(inputs.as_ptr());
             let result = to_array_f32(vcbrt_f32(x));
-
             for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
                 let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
+                assert!(ulp <= 1, "Lane {i}: cbrt({}) = {r}, ULP = {ulp}", inputs[i]);
             }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_f32_negative_values() {
-        unsafe {
-            let inputs = [-1.0_f32, -8.0, -27.0, -64.0];
-            let expected = [-1.0_f32, -2.0, -3.0, -4.0];
-            let x = vld1q_f32(inputs.as_ptr());
-            let result = to_array_f32(vcbrt_f32(x));
-
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f32(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_f32_zero() {
-        unsafe {
-            let pos_zero = vdupq_n_f32(0.0);
-            let neg_zero = vdupq_n_f32(-0.0);
-
-            let result_pos = to_array_f32(vcbrt_f32(pos_zero));
-            let result_neg = to_array_f32(vcbrt_f32(neg_zero));
-
-            for &r in &result_pos {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0, "Should be +0.0");
-            }
-            for &r in &result_neg {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0x80000000, "Should be -0.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_f32_infinity() {
-        unsafe {
-            let pos_inf = vdupq_n_f32(f32::INFINITY);
-            let neg_inf = vdupq_n_f32(f32::NEG_INFINITY);
-
-            let result_pos = to_array_f32(vcbrt_f32(pos_inf));
-            let result_neg = to_array_f32(vcbrt_f32(neg_inf));
-
-            for &r in &result_pos {
-                assert!(r.is_infinite() && r > 0.0, "Should be +∞");
-            }
-            for &r in &result_neg {
-                assert!(r.is_infinite() && r < 0.0, "Should be -∞");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_f32_nan() {
-        unsafe {
-            let nan = vdupq_n_f32(f32::NAN);
-            let result = to_array_f32(vcbrt_f32(nan));
-
-            for &r in &result {
-                assert!(r.is_nan(), "cbrt(NaN) should be NaN");
+            for (&inp, &e) in [(-1.0_f32, -1.0_f32), (-8.0, -2.0)].iter() {
+                let r = to_array_f32(vcbrt_f32(vdupq_n_f32(inp)));
+                let ulp = ulp_distance_f32(r[0], e);
+                assert!(ulp <= 1, "cbrt({inp}) = {}, ULP = {ulp}", r[0]);
             }
         }
     }
@@ -575,97 +517,31 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_cbrt_f64_perfect_cubes() {
+    fn test_cbrt_f64_special_values() {
         unsafe {
-            let inputs = [1.0_f64, 8.0];
-            let expected = [1.0_f64, 2.0];
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = to_array_f64(vcbrt_f64(x));
+            // ±0 → ±0 with sign preserved
+            let r = to_array_f64(vcbrt_f64(vdupq_n_f64(0.0)));
+            assert_eq!(r[0].to_bits(), 0, "cbrt(+0) should be +0.0");
 
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
+            let r = to_array_f64(vcbrt_f64(vdupq_n_f64(-0.0)));
+            assert_eq!(r[0].to_bits(), 1_u64 << 63, "cbrt(-0) should be -0.0");
 
-    #[test]
-    fn test_cbrt_f64_negative_values() {
-        unsafe {
-            let inputs = [-1.0_f64, -8.0];
-            let expected = [-1.0_f64, -2.0];
-            let x = vld1q_f64(inputs.as_ptr());
-            let result = to_array_f64(vcbrt_f64(x));
+            // ±∞ → ±∞
+            let r = to_array_f64(vcbrt_f64(vdupq_n_f64(f64::INFINITY)));
+            assert!(r[0].is_infinite() && r[0] > 0.0, "cbrt(+∞) should be +∞");
 
-            for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
-                let ulp = ulp_distance_f64(r, e);
-                assert!(
-                    ulp <= 1,
-                    "Lane {}: cbrt({}) = {}, expected {}, ULP = {}",
-                    i,
-                    inputs[i],
-                    r,
-                    e,
-                    ulp
-                );
-            }
-        }
-    }
+            let r = to_array_f64(vcbrt_f64(vdupq_n_f64(f64::NEG_INFINITY)));
+            assert!(r[0].is_infinite() && r[0] < 0.0, "cbrt(-∞) should be -∞");
 
-    #[test]
-    fn test_cbrt_f64_zero() {
-        unsafe {
-            let pos_zero = vdupq_n_f64(0.0);
-            let neg_zero = vdupq_n_f64(-0.0);
+            // NaN → NaN
+            let r = to_array_f64(vcbrt_f64(vdupq_n_f64(f64::NAN)));
+            assert!(r[0].is_nan(), "cbrt(NaN) should be NaN");
 
-            let result_pos = to_array_f64(vcbrt_f64(pos_zero));
-            let result_neg = to_array_f64(vcbrt_f64(neg_zero));
-
-            for &r in &result_pos {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == 0, "Should be +0.0");
-            }
-            for &r in &result_neg {
-                assert_eq!(r, 0.0);
-                assert!(r.to_bits() == (1_u64 << 63), "Should be -0.0");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_f64_infinity() {
-        unsafe {
-            let pos_inf = vdupq_n_f64(f64::INFINITY);
-            let neg_inf = vdupq_n_f64(f64::NEG_INFINITY);
-
-            let result_pos = to_array_f64(vcbrt_f64(pos_inf));
-            let result_neg = to_array_f64(vcbrt_f64(neg_inf));
-
-            for &r in &result_pos {
-                assert!(r.is_infinite() && r > 0.0, "Should be +∞");
-            }
-            for &r in &result_neg {
-                assert!(r.is_infinite() && r < 0.0, "Should be -∞");
-            }
-        }
-    }
-
-    #[test]
-    fn test_cbrt_f64_nan() {
-        unsafe {
-            let nan = vdupq_n_f64(f64::NAN);
-            let result = to_array_f64(vcbrt_f64(nan));
-
-            for &r in &result {
-                assert!(r.is_nan(), "cbrt(NaN) should be NaN");
+            // Perfect cubes (positive and negative), ULP-checked
+            for (inp, e) in [(1.0f64, 1.0f64), (8.0, 2.0), (-1.0, -1.0), (-8.0, -2.0)] {
+                let r = to_array_f64(vcbrt_f64(vdupq_n_f64(inp)));
+                let ulp = ulp_distance_f64(r[0], e);
+                assert!(ulp <= 1, "cbrt({inp}) = {}, ULP = {ulp}", r[0]);
             }
         }
     }
