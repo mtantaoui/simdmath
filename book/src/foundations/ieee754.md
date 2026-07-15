@@ -24,7 +24,8 @@ significand bits, because of the **implicit leading 1** in normal numbers.
 
 Let \\(s \in \{0,1\}\\) be the sign, \\(E\\) the unsigned integer formed by the
 exponent field, \\(T\\) the integer formed by the significand field, and
-\\(\mathrm{bias} = 2^{w-1} - 1\\) where \\(w\\) is the exponent width. Then:
+\\(\mathrm{bias} = 2^{w-1} - 1\\) where \\(w\\) is the exponent field width
+from the table above (8 for `binary32`, 11 for `binary64`). Then:
 
 - **Zero** (\\(E = 0,\ T = 0\\)): \\((-1)^s \cdot 0\\) — yes, \\(\pm 0\\) are distinct.
 - **Subnormal** (\\(E = 0,\ T \neq 0\\)):

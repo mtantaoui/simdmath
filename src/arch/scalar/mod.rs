@@ -8,4 +8,5 @@
 //! SSE-only `x86_64` targets (without AVX2/AVX-512) also fall through to this
 //! backend until a true SSE implementation is added.
 
+pub(crate) mod matmul;
 pub(crate) mod vec;

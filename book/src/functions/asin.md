@@ -147,7 +147,8 @@ chain of FMAs.) The sign of the final result is taken from the sign of
 For \\(|x| = 1\\) exactly, the implementation returns
 \\(\operatorname{sgn}(x) \cdot (\mathrm{PIO2}\_{\mathrm{HI}} + \mathrm{PIO2}\_{\mathrm{LO}})\\).
 
-For \\(|x| > 1\\), `NaN` is produced as `0.0 / (x - x)`.
+For \\(|x| > 1\\), `NaN` is produced by broadcasting the quiet-NaN constant
+(`f32::NAN` / `f64::NAN`) and blending it in on the out-of-domain lanes.
 
 ## 8. Per-precision differences (f32 vs f64)
 
@@ -176,7 +177,7 @@ provides the extra precision needed near \\(|x| = 1\\).
 Each backend computes all five branches unconditionally —
 small/large/tiny/\\(|x|=1\\)/out-of-domain — and merges them with a chain of
 four blends. The Dekker bit-mask is applied identically across backends
-(`_mm256_and_si256`, `_mm512_and_epi32`, `vandq_u32`).
+(`_mm256_and_si256`, `_mm512_and_si512`, `vandq_u32`).
 
 ## 10. Error analysis
 
@@ -203,13 +204,14 @@ sharply for \\(|x| \in [0.99, 1.0)\\).
 ## 11. Code excerpt
 
 The Dekker compensation step from
-[`src/arch/avx2/asin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/asin.rs)
-(lines 214–237):
+[`src/arch/avx2/math/asin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/asin.rs)
+(condensed — in the source, `r_z` is computed once from a `z` blended
+between the small- and large-range arguments and shared by both cases):
 
 ```rust,ignore
 let z_large = _mm256_mul_ps(_mm256_sub_ps(one, abs_x), half);   // (1 - |x|)/2
 let s_large = _mm256_sqrt_ps(z_large);                          // s = √z
-let r_large = rational_r(z_large, p_s0, p_s1, p_s2, q_s1, one);
+let r_z     = rational_r(z_arg, p_s0, p_s1, p_s2, q_s1, one);
 
 // Dekker split: clear low 12 mantissa bits to get the exact high part of s
 let df = _mm256_castsi256_ps(_mm256_and_si256(
@@ -224,7 +226,7 @@ let c = _mm256_div_ps(
 );
 
 // Compute w = s·r(z) + c
-let w = _mm256_fmadd_ps(s_large, r_large, c);
+let w = _mm256_fmadd_ps(s_large, r_z, c);
 
 // asin(|x|) = pio2_hi - 2·df - (2·w - pio2_lo)
 let two_w  = _mm256_mul_ps(two, w);

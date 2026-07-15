@@ -4,7 +4,7 @@
 //! - **AVX-512** (`x86_64` + `avx512f`)
 //! - **AVX2** (`x86_64` + `avx2`, no `avx512f`)
 //! - **NEON** (`aarch64` + `neon`)
-//! - **Scalar fallback** (all other targets — emits a `compile_error!` until implemented)
+//! - **Scalar fallback** (x86_64 without AVX2/AVX-512, and all other targets)
 
 #[cfg(all(
     target_arch = "x86_64",

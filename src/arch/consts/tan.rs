@@ -61,11 +61,11 @@ pub const T5_32: f64 = 0.00946564784943673166728; // 0x1362b9bf971bcdp-59
 // f64 Tangent kernel coefficients (__tan)
 // =============================================================================
 
-// From musl's __tan.c: rational approximation tan(x)/x ≈ 1 + x²*P(x²)/Q(x²)
-// where the reduced argument |x| < π/4.
+// From musl's __tan.c: odd polynomial tan(x) ≈ x + x³·P(x²) with P of
+// degree 12 in x² (13 coefficients), for reduced argument |x| < π/4.
 // These hex representations are from Sun's fdlibm via musl.
 
-/// Numerator coefficient T0 (x² term) = 3.33333333333334091986e-01
+/// Polynomial coefficient T0 (x² term) = 3.33333333333334091986e-01
 pub const T0_64: f64 = f64::from_bits(0x3FD5555555555563);
 
 /// Numerator coefficient T1 (x⁴ term) = 1.33333333333201242699e-01

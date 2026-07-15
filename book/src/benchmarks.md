@@ -24,7 +24,12 @@ benches/
 ├── asin.rs acos.rs atan.rs atan2.rs
 ├── exp.rs ln.rs pow.rs
 ├── sqrt.rs cbrt.rs
+├── matmul.rs          # vs faer, see the matmul chapter
 ```
+
+The `matmul` bench compares against [`faer`](https://crates.io/crates/faer)
+rather than a scalar baseline; its results are discussed in the
+[matmul chapter](./linalg/matmul.md#benchmarks).
 
 Cargo's auto-bench detection is **disabled** (`autobenches = false` in
 `Cargo.toml`) so that `common.rs` is not picked up as a bench target. Each

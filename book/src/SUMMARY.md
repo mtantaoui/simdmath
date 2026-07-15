@@ -53,6 +53,10 @@
 
 - [Vectorised arithmetic and reductions](./functions/arithmetic.md)
 
+# Linear Algebra
+
+- [Blocked matrix multiplication `matmul`](./linalg/matmul.md)
+
 # Precision and Performance
 
 - [ULP measurement methodology](./precision/methodology.md)

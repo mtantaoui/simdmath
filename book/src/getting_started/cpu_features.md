@@ -27,17 +27,17 @@ without `fma`, since every kernel assumes one-rounding multiply-adds.
 ## What "AVX-512 baseline" means
 
 AVX-512 is not a single feature: it is a family of 19+ extensions. `simdmath`
-requires the following **AVX-512 baseline**, which matches Intel's
-"Skylake-X" feature level:
+requires only the **foundation extension**:
 
 | Extension     | Rust `target_feature` | Provides                                                                 |
 |---------------|-----------------------|--------------------------------------------------------------------------|
 | AVX-512F      | `avx512f`             | 512-bit `zmm` registers, masked FP arithmetic, the foundation.           |
-| AVX-512VL     | `avx512vl`            | The AVX-512 instruction encodings for 128-bit and 256-bit registers.     |
-| AVX-512DQ     | `avx512dq`            | Doubleword/quadword conversions and `vrangeps`/`vrangepd`.               |
-| AVX-512BW     | `avx512bw`            | Byte/word masking — needed for cross-lane shuffles in `cbrt` and `pow`.  |
 
-If any of the four are missing, the AVX-512 backend falls back to AVX2.
+The backend selection in `src/arch/mod.rs` gates exclusively on `avx512f`;
+if it is missing, the build falls back to AVX2. Every CPU that ships
+AVX-512F in practice (Skylake-X onward, AMD Zen 4/5) also ships `avx512vl`,
+`avx512dq`, and `avx512bw`, so enabling those too is harmless — but
+`simdmath` neither checks for nor needs them.
 
 `simdmath` does **not** require AVX-512ER, IFMA, VBMI, VPOPCNTDQ, BF16, FP16,
 or any other "post-Skylake-X" extension. This keeps the code path
@@ -74,7 +74,7 @@ lscpu | grep -E -o 'avx[^ ]*' | sort -u
 cat /proc/cpuinfo | awk '/^flags/ {print; exit}' | tr ' ' '\n' | sort | column
 ```
 
-Look for `avx2`, `fma`, and the `avx512f`/`vl`/`bw`/`dq` quartet.
+Look for `avx2`, `fma`, and `avx512f`.
 
 ### macOS
 
@@ -120,25 +120,24 @@ listed; AVX2 needs `+fma` everywhere, NEON inherits FMA from the base ISA.
 
 | Function family                  | AVX2 backend           | AVX-512 backend          | NEON backend |
 |----------------------------------|------------------------|--------------------------|--------------|
-| `sin`, `cos`, `tan`              | `avx2`, `fma`          | baseline                 | `neon`       |
-| `asin`, `acos`, `atan`           | `avx2`, `fma`          | baseline                 | `neon`       |
-| `atan2`                          | `avx2`, `fma`          | baseline                 | `neon`       |
-| `exp`, `ln`                      | `avx2`, `fma`          | baseline                 | `neon`       |
-| `pow`                            | `avx2`, `fma`          | baseline                 | `neon`       |
+| `sin`, `cos`, `tan`              | `avx2`, `fma`          | `avx512f`                | `neon`       |
+| `asin`, `acos`, `atan`           | `avx2`, `fma`          | `avx512f`                | `neon`       |
+| `atan2`                          | `avx2`, `fma`          | `avx512f`                | `neon`       |
+| `exp`, `ln`                      | `avx2`, `fma`          | `avx512f`                | `neon`       |
+| `pow`                            | `avx2`, `fma`          | `avx512f`                | `neon`       |
 | `sqrt`                           | `avx`                  | `avx512f`                | `neon`       |
-| `cbrt`                           | `avx2`, `fma`          | baseline + `avx512bw`    | `neon`       |
+| `cbrt`                           | `avx2`, `fma`          | `avx512f`                | `neon`       |
 | element-wise add/mul/min/max     | `avx`                  | `avx512f`                | `neon`       |
 
-"baseline" refers to `avx512f + avx512vl + avx512dq + avx512bw`. The `cbrt`
-kernels lean on byte-level masks for the bias subtraction, hence the
-`avx512bw` call-out.
+Every AVX-512 kernel — `cbrt` and `pow` included — is written against the
+foundation extension only; no `avx512vl`/`dq`/`bw` instruction is emitted.
 
 ## Setting the features in `RUSTFLAGS`
 
-For the AVX-512 baseline, the canonical invocation is:
+For the AVX-512 backend, the canonical invocation is:
 
 ```bash
-RUSTFLAGS="-C target-feature=+avx512f,+avx512vl,+avx512dq,+avx512bw" \
+RUSTFLAGS="-C target-feature=+avx512f" \
   cargo build --release
 ```
 
@@ -153,7 +152,7 @@ not just enable the right encodings.
 compile with `--emit=asm` and grep:
 
 ```bash
-RUSTFLAGS="-C target-feature=+avx512f,+avx512vl,+avx512dq,+avx512bw" \
+RUSTFLAGS="-C target-feature=+avx512f" \
   cargo rustc --release -- --emit=asm
 grep -c 'zmm' target/release/deps/*.s     # >0 means AVX-512 was used
 grep -c 'ymm' target/release/deps/*.s     # AVX/AVX2

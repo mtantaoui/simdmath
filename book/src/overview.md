@@ -3,8 +3,8 @@
 `simdmath` is a Rust library that provides SIMD-vectorised implementations of
 common floating-point mathematical functions — trigonometric, inverse
 trigonometric, exponential, logarithmic, power, root, and element-wise
-arithmetic — for `f32` and `f64`, with backends for **AVX2**, **AVX-512**, and
-**ARM NEON**.
+arithmetic — plus a cache-blocked **matrix multiplication**, for `f32` and
+`f64`, with backends for **AVX2**, **AVX-512**, and **ARM NEON**.
 
 This book is the **mathematical reference** for the crate. It complements the
 [API documentation on docs.rs](https://docs.rs/simdmath) by deriving every
@@ -17,6 +17,8 @@ the per-backend SIMD implementation.
   [Getting Started → Installation](./getting_started/installation.md).
 - If you want to **understand a specific function**, jump straight to its
   chapter (e.g. [`sin`](./functions/sin.md), [`exp`](./functions/exp.md)).
+- If you want to **multiply matrices**, see
+  [Linear Algebra → `matmul`](./linalg/matmul.md).
 - If you want to **understand the precision claims**, read
   [Foundations → ULP](./foundations/ulp.md) and the
   [methodology chapter](./precision/methodology.md).

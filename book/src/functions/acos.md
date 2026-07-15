@@ -37,12 +37,15 @@ directly via a half-angle identity rather than going through asin.
 | `NaN`         | `NaN`        | IEEE 754-2008  |
 
 The output at \\(-1\\) is **not** exactly representable (because \\(\pi\\)
-isn't), so the implementation deliberately introduces an inexact-flag
-nudge by adding the smallest positive normal \\(X1P\\_120 = 2^{-126}\\) —
-this is what `X1P_120_32 = 1.175_494_4 \cdot 10^{-38}` from
+isn't), and IEEE 754 / C99 Annex F require that an *inexact* result raise
+the inexact exception — but computing it as the exact product
+\\(2 \cdot \mathtt{pio2\\_hi}\\) alone would not. The implementation
+therefore deliberately introduces an inexact-flag nudge by adding the tiny
+constant `X1P_120_32 = 1.175_494_4 · 10⁻³⁸` from
 [`arch/consts/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/consts/acos.rs)
-is for. The nudge is \\(\sim 10^7\\) smaller than 1 ULP of \\(\pi\\) in f32, so
-it cannot perturb the numerical result.
+(musl's trick, inherited with the algorithm). The nudge is \\(\sim 10^7\\)
+smaller than 1 ULP of \\(\pi\\) in f32, so it cannot perturb the numerical
+result — its only job is to make the addition round.
 
 ## 4. Algorithm overview
 
@@ -123,8 +126,9 @@ Symmetric to range B, with \\(z = (1+x)/2\\):
 
 \\[
 \operatorname{acos}(x)
-\\;=\\; \pi \\;-\\; 2 \cdot \big(s \cdot r(z) + c\big)
-\\;=\\; (\mathrm{PIO2}\_{\mathrm{HI}} \cdot 2) - 2 \cdot \mathrm{fmsub}(r, s, \mathrm{PIO2}\_{\mathrm{LO}})
+\\;=\\; 2\big(\pi/2 - \operatorname{asin}(s)\big)
+\\;=\\; 2 \cdot \big(\mathrm{PIO2}\_{\mathrm{HI}} - (s + w)\big),
+\qquad w = \mathrm{fmsub}(r, s, \mathrm{PIO2}\_{\mathrm{LO}})
 \tag{7.3}
 \\]
 
@@ -178,28 +182,32 @@ Both honour the **`≤ 1 ULP`** envelope from the
 ## 11. Code excerpt
 
 The range-A reconstruction (equation 7.1) from
-[`src/arch/avx2/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/acos.rs):
+[`src/arch/avx2/math/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/acos.rs):
 
 ```rust,ignore
-// |x| < 0.5: acos(x) = pio2_hi - (x - pio2_lo + x·r)
-let r_small = rational_r(x_sq, p_s0, p_s1, p_s2, q_s1, one);
-// fnmadd(x, r, pio2_lo) = pio2_lo - x·r
-let inner = _mm256_fnmadd_ps(x, r_small, pio2_lo);
-// pio2_hi - x - (pio2_lo - x·r)  ==  pio2_hi - (x - pio2_lo + x·r)
-let result_small = _mm256_sub_ps(_mm256_sub_ps(pio2_hi, x), inner);
+// |x| < 0.5: acos(x) = pio2_hi - (x - (pio2_lo - x·r))
+// The nested subtraction keeps pio2_hi and pio2_lo paired correctly so
+// that precision is not lost through the two-part representation of π/2.
+let result_small =
+    _mm256_sub_ps(pio2_hi, _mm256_sub_ps(x, _mm256_fnmadd_ps(x, r_z, pio2_lo)));
 ```
 
 Range B's compensated reconstruction (equation 7.2):
 
 ```rust,ignore
-// 0.5 <= x:  acos(x) = 2·(df + (s·r + c)) where df + c is the Dekker split of √z
-let r_large = rational_r(z_large, p_s0, p_s1, p_s2, q_s1, one);
-let df      = compensated_high_bits(s_large);
-let c       = _mm256_div_ps(
-    _mm256_sub_ps(z_large, _mm256_mul_ps(df, df)),
-    _mm256_add_ps(s_large, df));
+// 0.5 <= x:  acos(x) = 2·(df + w) where df + c is the Dekker split of √z.
+// df = s with the low 12 mantissa bits cleared (Dekker high part):
+let df = _mm256_castsi256_ps(_mm256_and_si256(
+    _mm256_castps_si256(s),
+    _mm256_set1_epi32(0xfffff000_u32 as i32),
+));
+// c = (z − df²)/(s + df) recovers the truncated low bits of s.
+let c_pos = _mm256_div_ps(
+    _mm256_sub_ps(z_arg, _mm256_mul_ps(df, df)),
+    _mm256_add_ps(s, df),
+);
 // fmadd(r, s, c) = r·s + c, fused into one rounding step
-let w = _mm256_fmadd_ps(r_large, s_large, c);
+let w_pos = _mm256_fmadd_ps(r_z, s, c_pos);
 let result_large_pos = _mm256_add_ps(
     _mm256_add_ps(w, w),                      // 2·w
     _mm256_add_ps(df, df));                   // 2·df

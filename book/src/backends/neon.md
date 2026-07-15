@@ -179,9 +179,10 @@ to the calling code; see [`f32x4.rs`](https://github.com/mtantaoui/simdmath/blob
 | Topic | File |
 |-------|------|
 | Register type, load/store, operators | [`neon/f32x4.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/f32x4.rs), [`neon/f64x2.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/f64x2.rs) |
-| `VecMath` register impl    | [`neon/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math.rs) |
-| Trig kernels               | [`neon/sin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/sin.rs), [`neon/cos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/cos.rs), [`neon/tan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/tan.rs) |
-| Inverse trig kernels       | [`neon/asin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/asin.rs), [`neon/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/acos.rs), [`neon/atan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/atan.rs) |
+| `VecMath` register impl    | [`neon/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/mod.rs) |
+| Matrix multiplication      | [`neon/matmul/`](https://github.com/mtantaoui/simdmath/tree/main/src/arch/neon/matmul) — see the [`matmul` chapter](../linalg/matmul.md) |
+| Trig kernels               | [`neon/math/sin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/sin.rs), [`neon/math/cos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/cos.rs), [`neon/math/tan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/tan.rs) |
+| Inverse trig kernels       | [`neon/math/asin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/asin.rs), [`neon/math/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/acos.rs), [`neon/math/atan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/atan.rs) |
 
 ## See also
 

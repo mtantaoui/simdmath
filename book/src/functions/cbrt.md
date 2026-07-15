@@ -3,8 +3,9 @@
 Unlike [`sqrt`](./sqrt.md), the cube root has no hardware instruction.
 The implementation here follows musl libc's `cbrt.c` / `cbrtf.c` (which
 descend from FreeBSD/fdlibm work by Bruce D. Evans): a bit-level magic
-seed gets an initial 5-bit estimate in zero arithmetic operations, and
-two or three Newton refinements bring it to \\(\le 1\\) ULP.
+seed gets an initial 5-bit estimate in zero arithmetic operations; two
+Newton refinements (f32) or one polynomial step plus one Newton
+refinement (f64) bring it to \\(\le 1\\) ULP.
 
 ## 1. Mathematical definition
 
@@ -72,8 +73,10 @@ t\_{n+1} \\;=\\; t_n - \frac{t_n^3 - x}{3 t_n^2}
 \\]
 
 The cubic-Newton iteration *triples* the number of correct bits per
-step. Five bits → fifteen → forty-five — so two iterations suffice for
-f32 (24 mantissa bits) and three for f64 (53 mantissa bits).
+step: five bits → fifteen → forty-five, so two iterations suffice for
+f32 (24 mantissa bits). The f64 path instead jumps from the 5-bit seed
+straight to ~23 bits with one degree-4 polynomial step, then a single
+Newton iteration reaches the full 53 bits.
 
 ## 5. Argument reduction (input decomposition)
 
@@ -137,10 +140,11 @@ pub(crate) const P3: f64 = -0.758_397_934_778_766_047_437; // 0xBFE844CBBEE751D9
 pub(crate) const P4: f64 =  0.145_996_192_886_612_446_982; // 0x3FC2B000D4E4EDD7
 ```
 
-The polynomial is evaluated by Horner
+The polynomial is evaluated with an Estrin-style split (the two halves
+run in parallel on the FMA ports)
 
 \\[
-P(r) \\;=\\; P_0 + r(P_1 + r(P_2 + r(P_3 + r P_4))),
+P(r) \\;=\\; \big(P_0 + r(P_1 + r P_2)\big) \\;+\\; r^3\big(P_3 + r P_4\big),
 \\]
 
 then \\(t \leftarrow t \cdot P(r)\\) produces the 23-bit estimate.
@@ -238,7 +242,7 @@ asymmetric.
 
 ## 11. Code excerpt
 
-From [`src/arch/avx2/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/cbrt.rs)
+From [`src/arch/avx2/math/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/cbrt.rs)
 — the f32 inner loop:
 
 ```rust,ignore
@@ -274,7 +278,7 @@ Newton iteration.
 - Kahan, W., *Computing a real cube root*, manuscript, 1991 — the original derivation of the magic-constant seed.
 - Markstein, *IA-64 and Elementary Functions*, Prentice-Hall 2000, §10.4.
 - Muller et al., *Handbook of Floating-Point Arithmetic*, 2nd ed., §11.3 (general theory of Newton iteration for elementary functions).
-- Repo source: [`src/arch/avx2/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/cbrt.rs), [`src/arch/avx512/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/cbrt.rs), [`src/arch/neon/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/cbrt.rs), [`src/arch/consts/cbrt.rs`][src-consts].
+- Repo source: [`src/arch/avx2/math/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/cbrt.rs), [`src/arch/avx512/math/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math/cbrt.rs), [`src/arch/neon/math/cbrt.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/cbrt.rs), [`src/arch/consts/cbrt.rs`][src-consts].
 
 ## See also
 

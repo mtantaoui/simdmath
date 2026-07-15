@@ -160,7 +160,7 @@ rounded by hardware mandate.
 
 ## 11. Code excerpt
 
-From [`src/arch/avx2/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math.rs):
+From [`src/arch/avx2/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/mod.rs):
 
 ```rust,ignore
 /// Square root of every lane via `vsqrtps`.
@@ -173,7 +173,7 @@ fn sqrt(&self) -> F32x8 {
 }
 ```
 
-From [`src/arch/neon/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math.rs):
+From [`src/arch/neon/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/mod.rs):
 
 ```rust,ignore
 /// Square root of every lane via `vsqrtq_f32`.
@@ -195,7 +195,7 @@ The f64 counterparts are identical modulo the suffix and lane count.
 - ARM Architecture Reference Manual: `FSQRT (vector)` for AArch64.
 - Markstein, *IA-64 and Elementary Functions*, chapter 9: how a hardware sqrt is actually implemented (SRT vs. Newton).
 - Muller et al., *Handbook of Floating-Point Arithmetic*, 2nd ed., §3.5 — discussion of correctly-rounded basic operations.
-- Repo source: [`src/arch/avx2/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math.rs), [`src/arch/avx512/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math.rs), [`src/arch/neon/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math.rs).
+- Repo source: [`src/arch/avx2/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/mod.rs), [`src/arch/avx512/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math/mod.rs), [`src/arch/neon/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/mod.rs).
 
 ## See also
 

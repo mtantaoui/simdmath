@@ -37,13 +37,15 @@ unstable-register-api = []
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+faer = "0.24.4"
+rand = "0.9"
 
 [package.metadata.docs.rs]
 # Mirror .cargo/config.toml so docs.rs renders KaTeX math.
 rustdoc-args = ["--html-in-header", "./docs/docs-header.html"]
-# docs.rs builds on x86_64 without target-feature flags by default. Until
-# the runtime-dispatch / scalar-fallback work lands, hint the build to use
-# AVX2 so it picks a real backend instead of the compile_error! stub.
+# docs.rs builds on x86_64 without target-feature flags by default, which
+# would select the scalar fallback. Hint the build to use AVX2 so the docs
+# are generated for a SIMD backend.
 rustc-args = ["-C", "target-feature=+avx2,+fma"]
 targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
@@ -85,6 +87,10 @@ harness = false
 
 [[bench]]
 name = "ln"
+harness = false
+
+[[bench]]
+name = "matmul"
 harness = false
 
 [[bench]]

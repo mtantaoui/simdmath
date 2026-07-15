@@ -110,7 +110,7 @@ the matching \\((\mathrm{hi}, \mathrm{lo})\\) pair the same way.
 
 ### f32 polynomial
 
-Degree-17 odd polynomial (in \\(t\\), equivalent to degree-9 in \\(t^2\\)):
+Degree-17 odd polynomial (in \\(t\\); the bracket has 9 coefficients, degree 8 in \\(t^2\\)):
 
 \\[
 \operatorname{atan}(t)
@@ -141,8 +141,9 @@ zero of \\(\operatorname{atan}(0)\\). The implementation handles
 
 ### f64 polynomial (musl `__atan`)
 
-Degree-21 polynomial in \\(t\\) (degree-11 in \\(t^2\\)), split into odd and
-even halves with \\(z = t^2\\), \\(w = z^2\\):
+Degree-23 polynomial in \\(t\\) (the correction is degree-11 in
+\\(t^2\\)), split into odd and even halves with \\(z = t^2\\),
+\\(w = z^2\\):
 
 \\[
 \begin{aligned}
@@ -183,7 +184,7 @@ For range id \\(i \in \{0, 1, 2, 3\}\\) the corrected result is:
 
 \\[
 \operatorname{atan}(|x|)
-\\;=\\; \mathrm{hi}_i \\;+\\; \big(\mathrm{lo}_i + t \cdot (s_1 + s_2) - t \cdot t \cdot (\ldots) - t\big)
+\\;=\\; \mathrm{hi}_i \\;+\\; \mathrm{lo}_i \\;+\\; \big(t - t \cdot (s_1 + s_2)\big)
 \\]
 
 In simpler form: `result = hi + (lo + t·poly(t²) - 0)` where the last
@@ -205,7 +206,7 @@ extracted sign bit propagates the input's sign-bit pattern unconditionally.
 | Aspect                  | f32                    | f64                          |
 |-------------------------|------------------------|------------------------------|
 | Reduction breakpoints   | 1                      | 4                            |
-| Polynomial degree (in \\(t\\)) | 17 (degree-9 in \\(t^2\\)) | 21 (degree-11 in \\(t^2\\))  |
+| Polynomial degree (in \\(t\\)) | 17 (degree-8 in \\(t^2\\)) | 23 (degree-11 in \\(t^2\\))  |
 | Per-range two-sum offset | no                    | yes (`ATANHI_*` / `ATANLO_*`) |
 | Worst-case ULP          | ≤ 3                    | ≤ 1                          |
 
@@ -260,8 +261,8 @@ Both honour the **`f32 ≤ 3 ULP, f64 ≤ 1 ULP`** envelopes from the
 ## 11. Code excerpt
 
 The f64 four-range cascading blend from
-[`src/arch/avx2/atan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/atan.rs)
-(lines 286–312):
+[`src/arch/avx2/math/atan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/atan.rs)
+(the `t0..t3` range values and the cascading blend):
 
 ```rust,ignore
 // Compute all 4 reduced arguments unconditionally

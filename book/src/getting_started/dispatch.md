@@ -37,38 +37,33 @@ skeleton, it reads:
 ```rust,ignore
 #[cfg(all(
     target_arch = "x86_64",
-    target_feature = "avx512f",
-    target_feature = "avx512vl",
-    target_feature = "avx512dq",
-    target_feature = "avx512bw",
+    not(target_feature = "avx512f"),
+    target_feature = "avx2"
 ))]
-pub use crate::arch::avx512::*;
+mod avx2;
 
-#[cfg(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    target_feature = "fma",
-    not(all(
-        target_feature = "avx512f",
-        target_feature = "avx512vl",
-        target_feature = "avx512dq",
-        target_feature = "avx512bw",
-    )),
+#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+mod avx512;
+
+#[cfg(target_arch = "aarch64")]
+mod neon;
+
+// Scalar fallback: no SIMD ISA available.
+#[cfg(any(
+    all(
+        target_arch = "x86_64",
+        not(target_feature = "avx512f"),
+        not(target_feature = "avx2"),
+    ),
+    not(any(target_arch = "x86_64", target_arch = "aarch64"))
 ))]
-pub use crate::arch::avx2::*;
-
-#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-pub use crate::arch::neon::*;
-
-#[cfg(not(any(
-    all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
-    all(target_arch = "aarch64", target_feature = "neon"),
-)))]
-pub use crate::arch::scalar::*;
+mod scalar;
 ```
 
-The order matters: AVX-512 wins over AVX2 when both are available, and the
-final `not(any(...))` arm is the scalar fallback.
+The arms are mutually exclusive by construction: AVX-512 wins over AVX2
+because the AVX2 arm explicitly requires `not(target_feature = "avx512f")`,
+and the final `any(...)` arm is the scalar fallback. Exactly one backend
+module exists in any given build.
 
 ## Why compile-time?
 
@@ -90,9 +85,9 @@ match:
 
 ## Why *not* compile-time?
 
-The price is **portability**. A binary compiled with
-`+avx512f,+avx512vl,+avx512dq,+avx512bw` will SIGILL on Skylake or any AMD
-chip older than Zen 4. Distributors have three options:
+The price is **portability**. A binary compiled with `+avx512f` will
+SIGILL on Skylake or any AMD chip older than Zen 4. Distributors have
+three options:
 
 - Ship a "lowest common denominator" build (`+avx2,+fma`) and accept the
   AVX-512 perf-on-the-table.
@@ -105,13 +100,9 @@ chip older than Zen 4. Distributors have three options:
 ```rust,ignore
 pub const fn active_backend() -> &'static str {
     if cfg!(all(target_arch = "x86_64",
-                target_feature = "avx512f",
-                target_feature = "avx512vl",
-                target_feature = "avx512dq",
-                target_feature = "avx512bw")) { "avx512" }
+                target_feature = "avx512f")) { "avx512" }
     else if cfg!(all(target_arch = "x86_64",
-                     target_feature = "avx2",
-                     target_feature = "fma"))  { "avx2"   }
+                     target_feature = "avx2")) { "avx2"   }
     else if cfg!(all(target_arch = "aarch64",
                      target_feature = "neon")) { "neon"   }
     else { "scalar" }

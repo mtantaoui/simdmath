@@ -48,9 +48,9 @@ the bottom and \\(\ln(\mathtt{f64::MAX}) \approx 709.8\\) at the top.
 | \\(x < 0\\)  | \\(\text{NaN}\\) |
 | \\(\text{NaN}\\) | \\(\text{NaN}\\) |
 
-Reproduced verbatim in the doc comments of [`src/arch/avx2/ln.rs`][src-avx2].
+Reproduced verbatim in the doc comments of [`src/arch/avx2/math/ln.rs`][src-avx2].
 
-[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/ln.rs
+[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/ln.rs
 
 ## 4. Algorithm overview
 
@@ -107,6 +107,11 @@ With \\(f = m - 1\\), \\(s = f/(2+f)\\), and \\(z = s^2\\), the polynomial is:
 R(z) \\;=\\; \mathtt{Lg_1}\\,z + \mathtt{Lg_2}\\,z^2 + \mathtt{Lg_3}\\,z^3 + \mathtt{Lg_4}\\,z^4 + \mathtt{Lg_5}\\,z^5 + \mathtt{Lg_6}\\,z^6 + \mathtt{Lg_7}\\,z^7.
 \\]
 
+(The implementation does not evaluate this as one Horner chain: following
+fdlibm, it splits the sum into odd and even powers of \\(z\\) — two short
+chains in \\(w = z^2\\) that run in parallel — and recombines with
+\\(R = z\\,(t_1 + z\\,t_2)\\). Same value, shorter dependency chain.)
+
 The coefficients approximate \\(2/(2n+1)\\) — the Taylor coefficients of
 \\(\log\\!\left(\tfrac{1+s}{1-s}\right) = 2s + \tfrac{2s^3}{3} + \tfrac{2s^5}{5} + \cdots\\) —
 but minimax-tuned to flatten the error curve over \\(|s| < 0.1716\\):
@@ -162,25 +167,31 @@ both directions of the inverse pair share their rounding behaviour.
 |---------------------|-------------------------------------------|------------|
 | internal precision  | f64 (8-lane f32 split into 2× f64 halves) | native f64 |
 | polynomial          | shared `LG1..LG7`                         | shared     |
-| subnormal handling  | inherited from the f64 kernel (×\\(2^{52}\\)) | ×\\(2^{52}\\)  |
+| subnormal handling  | **skipped** (promoted f32 is never f64-subnormal) | ×\\(2^{52}\\) pre-scaling |
 | ULP                 | \\(\le 2\\)                                   | \\(\le 2\\)    |
 
 As with [`exp`](./exp.md), the f32 path promotes to f64, runs the same
-`ln_core_f64`, and converts back. This trades two cvt instructions for
-the simplicity of a single shared coefficient table.
+kernel, and converts back. The kernel is generic over the caller:
+`ln_core_f64::<PROMOTED>`. The f32 wrapper instantiates `PROMOTED = true`,
+which compiles out the f64-subnormal pre-scaling — the smallest positive
+f32 subnormal is \\(2^{-149}\\), comfortably inside f64's normal range
+(\\(\ge 2^{-1022}\\)) after promotion — while the f64 entry point
+(`PROMOTED = false`) keeps it. One coefficient table, two specialisations.
 
 ## 9. Per-backend differences (AVX2 / AVX-512 / NEON)
 
 | backend  | f32 lanes | f64 lanes | exponent extraction                |
 |----------|-----------|-----------|-------------------------------------|
 | AVX2     | 8 (via 2× f64) | 4    | `_mm256_srli_epi64(bits, 52)` then mask |
-| AVX-512  | 16 (via 2× f64) | 8   | `_mm512_getexp_pd` (direct hardware) |
-| NEON     | 4 (via 2× f64)  | 2   | `vshrq_n_u64(bits, 52)` then mask    |
+| AVX-512  | 16 (via 2× f64) | 8   | `_mm512_srli_epi64(bits, 52)` then mask |
+| NEON     | 4 (via 2× f64)  | 2   | `vshrq_n_s64::<52>(bits)` then mask  |
 
-AVX-512 has a dedicated `vgetexppd` / `vgetmantpd` pair that does the
-\\(x = 2^k \cdot m\\) split in hardware; the AVX2 and NEON paths emulate it
-with integer shifts. The polynomial evaluation is identical — eight FMAs
-on \\(z = s^2\\) in Horner order from \\(\mathtt{Lg_7}\\) down to \\(\mathtt{Lg_1}\\).
+All three backends do the \\(x = 2^k \cdot m\\) split the same way — an
+integer shift of the raw bits (AVX-512 has dedicated `vgetexppd` /
+`vgetmantpd` instructions, but the shared shift keeps the backends
+identical). The polynomial evaluation is also identical — the odd/even
+split described in section 6: two independent Horner chains in
+\\(w = z^2\\) (six FMAs total) recombined with one FMA and one multiply.
 
 ## 10. Error analysis
 
@@ -210,7 +221,7 @@ polynomial residual peaks.
 
 ## 11. Code excerpt
 
-From [`src/arch/avx2/ln.rs`][src-avx2] (abridged Horner evaluation of
+From [`src/arch/avx2/math/ln.rs`][src-avx2] (abridged Horner evaluation of
 \\(R(s^2)\\)):
 
 ```rust,ignore
@@ -219,23 +230,25 @@ let f = _mm256_sub_pd(m, one);
 let s = _mm256_div_pd(f, _mm256_add_pd(two, f));
 let z = _mm256_mul_pd(s, s);
 
-// Step 3: polynomial R(z)
-let r = _mm256_fmadd_pd(z, _mm256_set1_pd(LG7_64), _mm256_set1_pd(LG6_64));
-let r = _mm256_fmadd_pd(z, r, _mm256_set1_pd(LG5_64));
-let r = _mm256_fmadd_pd(z, r, _mm256_set1_pd(LG4_64));
-let r = _mm256_fmadd_pd(z, r, _mm256_set1_pd(LG3_64));
-let r = _mm256_fmadd_pd(z, r, _mm256_set1_pd(LG2_64));
-let r = _mm256_fmadd_pd(z, r, _mm256_set1_pd(LG1_64));
-let r = _mm256_mul_pd(r, z);
+// Step 3: polynomial R(z), odd/even split in w = z²
+let t1 = _mm256_fmadd_pd(w, lg7, lg5); // Lg5 + w*Lg7
+let t1 = _mm256_fmadd_pd(w, t1, lg3);  // Lg3 + w*(...)
+let t1 = _mm256_fmadd_pd(w, t1, lg1);  // Lg1 + w*(...)
+
+let t2 = _mm256_fmadd_pd(w, lg6, lg4); // Lg4 + w*Lg6
+let t2 = _mm256_fmadd_pd(w, t2, lg2);  // Lg2 + w*(...)
+
+let r = _mm256_fmadd_pd(z, t2, t1);    // t1 + z*t2
+let r = _mm256_mul_pd(z, r);           // R = z*(t1 + z*t2)
 
 // Step 4: reconstruct
-let hfsq    = _mm256_mul_pd(_mm256_set1_pd(0.5), _mm256_mul_pd(f, f));
-let k_ln2hi = _mm256_mul_pd(k_f64, _mm256_set1_pd(LN2_HI_64));
-let k_ln2lo = _mm256_mul_pd(k_f64, _mm256_set1_pd(LN2_LO_64));
 // ln(x) = k*LN2_HI - ((hfsq - (s*(hfsq+R) + k*LN2_LO)) - f)
-let inner   = _mm256_sub_pd(hfsq,
-              _mm256_fmadd_pd(s, _mm256_add_pd(hfsq, r), k_ln2lo));
-let result  = _mm256_sub_pd(k_ln2hi, _mm256_sub_pd(inner, f));
+let s_term = _mm256_mul_pd(s, _mm256_add_pd(hfsq, r));
+let k_ln2_lo = _mm256_mul_pd(k, ln2_lo);
+let inner = _mm256_add_pd(s_term, k_ln2_lo);
+let hfsq_minus_inner = _mm256_sub_pd(hfsq, inner);
+let log_part = _mm256_sub_pd(hfsq_minus_inner, f);
+let result = _mm256_fmsub_pd(k, ln2_hi, log_part);
 ```
 
 ## 12. References
@@ -244,7 +257,7 @@ let result  = _mm256_sub_pd(k_ln2hi, _mm256_sub_pd(inner, f));
 - Tang, P. T. P., *Table-driven implementation of the logarithm function in IEEE floating-point arithmetic*, ACM TOMS 16(4), 1990.
 - Muller et al., *Handbook of Floating-Point Arithmetic*, 2nd ed., §11.2 (logarithm-specific reduction tricks).
 - Goldberg, *What every computer scientist should know about floating-point arithmetic*, ACM Comp. Surveys 23(1), 1991, §3.2 — for why \\(\log(1+x)\\) requires special care near \\(x = 0\\).
-- Repo source: [`src/arch/avx2/ln.rs`][src-avx2], [`src/arch/avx512/ln.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/ln.rs), [`src/arch/neon/ln.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/ln.rs), [`src/arch/consts/ln.rs`][src-consts].
+- Repo source: [`src/arch/avx2/math/ln.rs`][src-avx2], [`src/arch/avx512/math/ln.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math/ln.rs), [`src/arch/neon/math/ln.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/ln.rs), [`src/arch/consts/ln.rs`][src-consts].
 
 ## See also
 

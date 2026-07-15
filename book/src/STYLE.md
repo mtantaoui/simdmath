@@ -69,6 +69,6 @@ with `book/src/appendices/E_bibliography.md`. Inline citations use
 
 - From book to rustdoc: ``[`F32x8`](https://docs.rs/simdmath/latest/simdmath/...)``
 - From book to source: relative GitHub link
-  `[arch/avx2/exp.rs](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/exp.rs)`.
+  `[arch/avx2/exp.rs](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/exp.rs)`.
 - From rustdoc to book: include a sentence
   `// See the [book chapter on exp](https://mtantaoui.github.io/simdmath/functions/exp.html) for the full derivation.`

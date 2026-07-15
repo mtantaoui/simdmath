@@ -109,6 +109,23 @@ Inwendig Product in Dubbele Precisie*. RC-Informatie 22, Technische
 Hogeschool Eindhoven, 1968. (Veltkamp splitting, the precursor of
 Dekker's product.) Key: `Veltkamp1968`.
 
+[21] Goto, K., van de Geijn, R. A. *Anatomy of High-Performance Matrix
+Multiplication*. ACM Transactions on Mathematical Software, 34(3),
+Article 12, May 2008. DOI:10.1145/1356052.1356053. (The layered blocking
+and packing strategy used by the `matmul` implementation.)
+Key: `Goto2008`.
+
+[22] Van Zee, F. G., van de Geijn, R. A. *BLIS: A Framework for Rapidly
+Instantiating BLAS Functionality*. ACM Transactions on Mathematical
+Software, 41(3), Article 14, June 2015. DOI:10.1145/2764454. (Names the
+microkernel abstraction and the five-loop structure.) Key: `VanZee2015`.
+
+[23] Low, T. M., Igual, F. D., Smith, T. M., Quintana-Ortí, E. S.
+*Analytical Modeling Is Enough for High-Performance BLIS*. ACM
+Transactions on Mathematical Software, 43(2), Article 12, August 2016.
+DOI:10.1145/2925987. (The cache-derived \\(k_c, m_c, n_c\\) model used by
+`matmul/cache.rs`.) Key: `Low2016`.
+
 ## BibTeX source
 
 The same entries in BibTeX form, for ingestion by reference managers and
@@ -279,5 +296,34 @@ the rustdoc `bibtex-js` integration:
   institution = {Technische Hogeschool Eindhoven},
   number      = {RC-Informatie 22},
   year        = {1968}
+}
+@article{Goto2008,
+  author  = {Goto, Kazushige and van de Geijn, Robert A.},
+  title   = {Anatomy of High-Performance Matrix Multiplication},
+  journal = {ACM Transactions on Mathematical Software},
+  volume  = {34},
+  number  = {3},
+  year    = {2008},
+  doi     = {10.1145/1356052.1356053}
+}
+
+@article{VanZee2015,
+  author  = {Van Zee, Field G. and van de Geijn, Robert A.},
+  title   = {BLIS: A Framework for Rapidly Instantiating BLAS Functionality},
+  journal = {ACM Transactions on Mathematical Software},
+  volume  = {41},
+  number  = {3},
+  year    = {2015},
+  doi     = {10.1145/2764454}
+}
+
+@article{Low2016,
+  author  = {Low, Tze Meng and Igual, Francisco D. and Smith, Tyler M. and Quintana-Ort\'{\i}, Enrique S.},
+  title   = {Analytical Modeling Is Enough for High-Performance BLIS},
+  journal = {ACM Transactions on Mathematical Software},
+  volume  = {43},
+  number  = {2},
+  year    = {2016},
+  doi     = {10.1145/2925987}
 }
 </pre>

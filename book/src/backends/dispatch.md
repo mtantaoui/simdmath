@@ -15,62 +15,58 @@ selection with `RUSTFLAGS`.
 The selector lives at the top of [`src/arch/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/mod.rs):
 
 ```rust,ignore
-#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
-pub(crate) use avx512 as current;
-
 #[cfg(all(
     target_arch = "x86_64",
     not(target_feature = "avx512f"),
     target_feature = "avx2"
 ))]
-pub(crate) use avx2 as current;
+pub(crate) mod avx2;
 
-#[cfg(all(
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    not(target_feature = "avx2"),
-    target_feature = "sse4.1"
+#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+pub(crate) mod avx512;
+
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+pub(crate) mod neon;
+
+// Scalar fallback: compiled whenever there is no SIMD backend selected,
+// i.e. either an x86_64 host without AVX2/AVX-512 (with or without
+// SSE4.1) or any other non-x86/non-aarch64 target.
+#[cfg(any(
+    all(
+        target_arch = "x86_64",
+        not(target_feature = "avx512f"),
+        not(target_feature = "avx2"),
+    ),
+    not(any(
+        target_arch = "x86_64",
+        all(target_arch = "aarch64", target_feature = "neon")
+    ))
 ))]
-pub(crate) use sse as current;
-
-#[cfg(all(
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    not(target_feature = "avx2"),
-    not(target_feature = "sse4.1")
-))]
-pub(crate) use scalar as current;
-
-#[cfg(target_arch = "aarch64")]
-pub(crate) use neon as current;
-
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub(crate) use scalar as current;
+pub(crate) mod scalar;
 ```
 
 A parallel ladder in [`src/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/math/mod.rs)
-selects the matching `Vec<T>` `VecMath` implementation file.
-
-The `current` alias is the single name that the rest of the crate imports
-from; downstream code never names a specific backend, only `arch::current`.
+selects the matching `[T]` / `Vec<T>` `SliceMath` / `VecMath` implementation
+file, so exactly one backend's trait impls exist in any given build.
 
 ## Priority order
 
-Reading the cascade top-to-bottom yields:
+Reading the cascade yields:
 
 | Priority | Selected backend | Required target | Required feature(s)        |
 |----------|------------------|-----------------|----------------------------|
 | 1        | AVX-512          | `x86_64`        | `avx512f`                  |
-| 2        | AVX2             | `x86_64`        | `avx2` (and implicitly `fma`) |
-| 3        | SSE 4.1          | `x86_64`        | `sse4.1` (skeleton, not full coverage) |
-| 4        | Scalar fallback  | `x86_64`        | (no SIMD feature)          |
-| 5        | NEON             | `aarch64`       | (always on)                |
-| 6        | Scalar fallback  | other           | (no SIMD)                  |
+| 2        | AVX2             | `x86_64`        | `avx2` (and `fma`)         |
+| 3        | Scalar fallback  | `x86_64`        | (no AVX2/AVX-512)          |
+| 4        | NEON             | `aarch64`       | `neon` (always on AArch64) |
+| 5        | Scalar fallback  | other           | (no SIMD)                  |
 
-The `not(target_feature = "...")` guards in each rule are what make the
-ladder a strict priority order: the AVX2 arm only fires when AVX-512 is
-*absent*, etc. Without those guards two arms would match and the build
-would fail with a duplicate-name error on `current`.
+There is deliberately **no SSE backend**: an x86_64 build without AVX2 goes
+straight to the scalar fallback, SSE 4.1 or not. The
+`not(target_feature = "...")` guards are what make the ladder a strict
+priority order: the AVX2 arm only fires when AVX-512 is *absent*, etc.
+Without those guards two arms would match and the build would define the
+same trait impls twice.
 
 ## Why no runtime dispatch (yet)?
 
@@ -128,12 +124,12 @@ RUSTFLAGS="-C target-feature=+avx512f" cargo build --release
 To exercise the scalar fallback on x86_64:
 
 ```bash
-RUSTFLAGS="-C target-feature=-avx512f,-avx2,-sse4.1,-fma" \
+RUSTFLAGS="-C target-feature=-avx512f,-avx2,-fma" \
     cargo build --release
 ```
 
 Note the leading minus signs — the scalar fallback only compiles when
-*all three* of `avx2`, `avx512f`, and `sse4.1` are absent. To
+*both* `avx2` and `avx512f` are absent. To
 cross-compile to ARM and verify the NEON path:
 
 ```bash

@@ -32,10 +32,11 @@ It is **odd**, **\\(2\pi\\)-periodic**, and analytic on the whole real line.
 | `+∞`          | `NaN`  | C99 Sec. F.10.1.6  |
 | `-∞`          | `NaN`  | C99 Sec. F.10.1.6  |
 | `NaN`         | `NaN`  | IEEE 754-2008  |
-| \\(\lvert x\rvert < 10^{-300}\\) (f64) / \\(2^{-126}\\) (f32) | `x` | tiny-arg shortcut |
+| \\(\lvert x\rvert < 10^{-300}\\) (f64) / \\(2^{-26}\\) (f32) | `x` | tiny-arg shortcut |
 
-The tiny-argument shortcut is correctly rounded because the Taylor
-remainder \\(-x^3/6\\) underflows to zero for any subnormal-or-smaller input.
+The tiny-argument shortcut is correctly rounded because the leading Taylor
+correction \\(-x^3/6\\) is smaller than half an ULP of \\(x\\) at the target
+precision (and, for the f64 threshold, underflows outright).
 
 ## 4. Algorithm overview
 
@@ -66,8 +67,8 @@ captures all but the trailing few bits of \\(\pi/2\\) exactly:
 
 For f64 the reduction iterates a second time using a third constant
 `PIO2_2_64` to absorb the residual rounding error, matching musl's
-`__rem_pio2` second iteration (see [`avx2/sin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/sin.rs)
-lines 260–268).
+`__rem_pio2` second iteration (see the reduction block of `_mm256_sin_pd`
+in [`avx2/math/sin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/sin.rs)).
 
 The integer round is implemented with the **TOINT magic-number trick**:
 
@@ -158,10 +159,21 @@ The branchless implementation extracts the two quadrant bits separately:
 - bit 0 of \\(n\\) — "use cos kernel" (true for \\(n=1,3\\)),
 - bit 1 of \\(n\\) — "negate" (true for \\(n=2,3\\)).
 
+On AVX2 both masks come straight from shifts, because `blendv` only reads
+the *sign bit* of its mask: shifting bit 0 of \\(n\\) into bit 63 drives the
+kernel select directly, and the conditional negation collapses to a single
+`xor` with the sign bit isolated under the negate mask — no compare, no
+second blend:
+
 ```rust,ignore
+let use_cos  = _mm256_castsi256_pd(_mm256_slli_epi64(n_256, 63));
+let neg_sign = _mm256_and_pd(
+    _mm256_castsi256_pd(_mm256_slli_epi64(n_256, 62)),
+    sign_bit,
+);
+
 let kernel_result = _mm256_blendv_pd(sin_y, cos_y, use_cos);
-let negated       = _mm256_xor_pd(kernel_result, sign_bit);
-let result        = _mm256_blendv_pd(kernel_result, negated, negate);
+let result        = _mm256_xor_pd(kernel_result, neg_sign);
 ```
 
 ## 8. Per-precision differences (f32 vs f64)
@@ -181,17 +193,17 @@ final ULP past the `≤ 2` bound. See the AVX2 promote/demote idiom in
 
 ## 9. Per-backend differences
 
-| Backend  | f32 lanes | f64 lanes | Selection idiom            |
-|----------|-----------|-----------|-----------------------------|
-| AVX2     | 8         | 4         | `_mm256_blendv_pd`          |
-| AVX-512  | 16        | 8         | `_mm512_mask_blend_pd`      |
-| NEON     | 4         | 2         | `vbslq_f64(mask, t, f)`     |
+| Backend  | f32 lanes | f64 lanes | Quadrant-mask idiom                          |
+|----------|-----------|-----------|----------------------------------------------|
+| AVX2     | 8         | 4         | sign-bit shifts + `_mm256_blendv_pd` / `xor` |
+| AVX-512  | 16        | 8         | `_mm512_test_epi64_mask` + `_mm512_mask_xor_pd` |
+| NEON     | 4         | 2         | `vtstq_s64` + `vbslq_f64` / masked `veor`    |
 
-The AVX-512 path uses opmask-based blending (`__mmask8`/`__mmask16`
-returned directly from `_mm512_cmp_pd_mask`), eliminating the vector
-sign-bit detour. The NEON path additionally has to emulate
-`vmvnq_u64` via XOR-with-all-ones for the negation step (see
-[NEON backend chapter](../backends/neon.md)).
+The AVX-512 path tests the quadrant bits straight into an opmask
+(`vptestm`, one instruction per mask) and applies the negation with a
+single masked xor. The NEON path uses `vtst` (all-ones lane where the
+tested bit is set) for the masks and the same masked-xor trick for the
+negation (see [NEON backend chapter](../backends/neon.md)).
 
 The numerical algorithm is byte-for-byte identical across backends; only
 the predication / blending instruction families differ.
@@ -245,8 +257,8 @@ pub(crate) unsafe fn _mm256_sin_ps(x: __m256) -> __m256 {
 }
 ```
 
-The f64 sine kernel (Horner-split for parallelism, real source line range
-~318–340 of `avx2/sin.rs`):
+The f64 sine kernel (Horner-split for parallelism, `sin_kernel_f64` in
+`avx2/math/sin.rs`):
 
 ```rust,ignore
 unsafe fn sin_kernel_f64(x: __m256d) -> __m256d {

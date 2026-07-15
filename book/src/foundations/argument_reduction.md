@@ -75,16 +75,25 @@ integers in the high constant), typically \\(|x| \le 2^{50}\\) or so for
 
 ### Worked numerics for `f64` \\(\pi/2\\) split
 
-The triplet used in `src/arch/consts/sin.rs` is:
+The constants actually used (defined in `src/arch/consts/cos.rs`, shared by
+the trig kernels, and taken verbatim from musl) form a *four-part* ladder —
+two truncated "hi" chunks, each paired with its full-precision tail:
 
 ```text
-PIO2_HI   = 0x3FF921FB54442D18   = 1.5707963267948965579989817...
-PIO2_MID  = 0x3C91A62633145C06   = 6.123233995736766e-17
-PIO2_LO   = 0x397B839A252049C1   = 4.965825579589115e-32
+PIO2_1_64  = 0x3FF921FB54400000  = 1.57079632673412561417e+00   # top 33 bits of π/2 (low bits zero)
+PIO2_1T_64 = 0x3DD0B4611A626331  = 6.07710050650619224932e-11   # π/2 − PIO2_1, rounded
+PIO2_2_64  = 0x3DD0B4611A600000  = 6.07710050630396597660e-11   # top 33 bits of that tail
+PIO2_2T_64 = 0x3BA3198A2E037073  = 2.02226624879595063154e-21   # remainder
 ```
 
-The sum equals \\(\pi/2\\) to 156 bits — enough to shake out an integer
-multiplier \\(k\\) up to \\(2^{53 + 50}\\) before the residue starts losing bits.
+Because `PIO2_1` and `PIO2_2` end in a run of zero bits, the products
+\\(k \cdot \mathtt{PIO2\\_1}\\) and \\(k \cdot \mathtt{PIO2\\_2}\\) are exact for
+the \\(k\\) range allowed by the input clamp, so all the rounding lives in the
+tiny `*T` tail terms. The `f64` kernels subtract \\(k \cdot \mathtt{PIO2\\_1}\\),
+then \\(k \cdot \mathtt{PIO2\\_2}\\) and \\(k \cdot \mathtt{PIO2\\_2T}\\) with an
+explicit cancellation-recovery step (musl's "second-iteration" `__rem_pio2`
+form); the `f32`-via-`f64` paths get away with the two-part
+`(PIO2_1_32, PIO2_1T_32)` pair.
 
 ## Strategy 2: Payne-Hanek reduction
 

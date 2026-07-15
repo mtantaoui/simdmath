@@ -24,3 +24,8 @@ target
 # Added by cargo
 
 /target
+
+# Python
+/.venv
+/book/book
+/bench-results

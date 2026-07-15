@@ -1,16 +1,15 @@
-pub(crate) mod abs;
-pub(crate) mod acos;
-pub(crate) mod asin;
-pub(crate) mod atan;
-pub(crate) mod atan2;
-pub(crate) mod cbrt;
-pub(crate) mod cos;
-pub(crate) mod exp;
+//! AVX2 backend: 8-lane `f32` / 4-lane `f64` register types and the
+//! operations built on them.
+//!
+//! - [`f32x8`] / [`f64x4`] — the SIMD register types and their `Load` /
+//!   `Store` implementations
+//! - [`math`] — element-wise math functions (`sin`, `exp`, `pow`, …) and the
+//!   register-level `VecMath` implementations
+//! - [`matmul`] — BLIS-style blocked matrix multiplication
+//! - [`vec`] — `SliceExt` / `VecExt` arithmetic implementations
+
 pub(crate) mod f32x8;
 pub(crate) mod f64x4;
-pub(crate) mod ln;
 pub(crate) mod math;
-pub(crate) mod pow;
-pub(crate) mod sin;
-pub(crate) mod tan;
+pub(crate) mod matmul;
 pub(crate) mod vec;

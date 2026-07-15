@@ -49,7 +49,7 @@ Three immediate consequences set the tone for everything that follows.
    a NaN. By convention this crate reports a ULP distance of `0` when both the
    reference and the candidate are NaN, and `u32::MAX` / `u64::MAX` when only
    one of them is. This matches the tests in
-   [`src/arch/avx2/cos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/cos.rs).
+   [`src/arch/avx2/math/cos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/cos.rs).
 
 ## The oracle policy for v0.1
 

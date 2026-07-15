@@ -183,9 +183,10 @@ generate spurious infinities or NaNs in arithmetic) and masked on store
 | Topic | File |
 |-------|------|
 | Register type, load/store, operators | [`avx2/f32x8.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/f32x8.rs), [`avx2/f64x4.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/f64x4.rs) |
-| `VecMath` register impl   | [`avx2/math.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math.rs) |
-| Trig kernels              | [`avx2/sin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/sin.rs), [`avx2/cos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/cos.rs), [`avx2/tan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/tan.rs) |
-| Inverse trig kernels      | [`avx2/asin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/asin.rs), [`avx2/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/acos.rs), [`avx2/atan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/atan.rs) |
+| `VecMath` register impl   | [`avx2/math/mod.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/mod.rs) |
+| Matrix multiplication      | [`avx2/matmul/`](https://github.com/mtantaoui/simdmath/tree/main/src/arch/avx2/matmul) — see the [`matmul` chapter](../linalg/matmul.md) |
+| Trig kernels              | [`avx2/math/sin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/sin.rs), [`avx2/math/cos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/cos.rs), [`avx2/math/tan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/tan.rs) |
+| Inverse trig kernels      | [`avx2/math/asin.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/asin.rs), [`avx2/math/acos.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/acos.rs), [`avx2/math/atan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/atan.rs) |
 | Vec-level loop / chunking | [`math/avx2.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/math/avx2.rs) |
 
 ## See also

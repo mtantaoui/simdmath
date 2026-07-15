@@ -76,6 +76,7 @@
 //! [mathematical reference book](https://github.com/mtantaoui/simdmath/tree/main/book).
 
 mod arch;
+pub mod linalg;
 pub(crate) mod math;
 pub(crate) mod ops;
 

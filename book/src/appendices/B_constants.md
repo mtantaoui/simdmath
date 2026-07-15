@@ -214,21 +214,21 @@ exponent field by 3 and add a magic constant — to get a 5-bit estimate of
 
 | Constant | Value | Role |
 |----------|-------|------|
-| `B1_32` | `709958130` (`0x2A517D72`) | Normal-input bias: roughly \\((127 - 127/3 - 0.0331) \cdot 2^{23}\\) |
-| `B2_32` | `642849266` (`0x264F1AB2`) | Subnormal-input bias: same trick after a \\(2^{24}\\) pre-scale |
+| `B1_32` | `709958130` (`0x2A5119F2`) | Normal-input bias: roughly \\((127 - 127/3 - 0.0331) \cdot 2^{23}\\) |
+| `B2_32` | `642849266` (`0x265119F2`) | Subnormal-input bias: same trick after a \\(2^{24}\\) pre-scale |
 | `X1P24_32` | `16777216.0` (`0x4B800000`) | \\(2^{24}\\): pre-scale for f32 subnormals |
 
 ### f64 magic seeds
 
 | Constant | Value | Role |
 |----------|-------|------|
-| `B1_64` | `715094163` (`0x2AA68893`) | Normal-input bias for the upper 32 bits of an f64 |
-| `B2_64` | `696219795` (`0x297D2293`) | Subnormal-input bias |
+| `B1_64` | `715094163` (`0x2A9F7893`) | Normal-input bias for the upper 32 bits of an f64 |
+| `B2_64` | `696219795` (`0x297F7893`) | Subnormal-input bias |
 | `X1P54_64` | `18014398509481984.0` (`0x4350000000000000`) | \\(2^{54}\\): pre-scale for f64 subnormals |
 | `ROUND_MASK_64` | `0xFFFFFFFFC0000000` | Truncates a f64 to 23 significant bits before the last Newton step (so \\(t \cdot t\\) is exact) |
 | `ROUND_BIAS_64` | `0x80000000` | Bias added before masking, to round-away-from-zero rather than truncate |
 
-The seed `B1_64 = 715094163 = 0x2AA68893` is the f64 analogue of the famous
+The seed `B1_64 = 715094163 = 0x2A9F7893` is the f64 analogue of the famous
 *0x5F3759DF* fast-inverse-square-root trick: a single integer add to the
 exponent half of the mantissa, exploiting that
 \\(\log_2 \sqrt[3]{x} = \tfrac{1}{3}\log_2 x\\).

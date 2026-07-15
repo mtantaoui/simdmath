@@ -57,10 +57,9 @@ overlapping rules are resolved deterministically:
 | 13| `pow(±∞, y), y \gtrless 0`         | \\(\pm\infty\\) or \\(\pm 0\\) as appropriate |
 
 The full table is encoded as a sequence of mask blends in
-[`src/arch/avx2/pow.rs`][src-avx2] starting around line 440 (search for
-`y_is_odd_int`).
+[`src/arch/avx2/math/pow.rs`][src-avx2] (search for `y_is_odd_int`).
 
-[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/pow.rs
+[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/pow.rs
 
 ## 4. Algorithm overview
 
@@ -92,16 +91,39 @@ Five stages:
 4. **Sign correction.** If \\(x < 0\\) and \\(y\\) is an odd integer, negate.
 5. **Special-case overlay.** Mask-blend the 13 IEEE 754 cases.
 
+That diagram describes the **f64 path**. The **f32 path** promotes to f64
+and then deliberately *skips* the compensation machinery: the raw chain is
+selected by a const generic, `pow_raw_f64::<PRECISE>`, and the f32 wrapper
+instantiates `PRECISE = false`, which
+
+- uses the plain single-`f64` logarithm (no 2Sum split — `ln_hilo` returns
+  `(hi, 0)`),
+- multiplies \\(y \cdot \ell_\text{hi}\\) with one ordinary `mul` (no Dekker
+  product),
+- evaluates `exp` with a division-free degree-10 Taylor polynomial instead
+  of the fdlibm Padé form, and
+- skips the subnormal pre-scaling (a promoted f32 is never f64-subnormal).
+
+This is sound because the f32 error budget is enormous in f64 terms: the
+absolute error of \\(y\ln|x|\\) computed in plain f64 is
+\\(\approx |y\ln|x|| \cdot 2^{-52} \le 89 \cdot 2^{-52}\\) (finite f32
+results require \\(|y\ln|x|| \lesssim 89\\)), orders of magnitude below half
+an f32 ULP (\\(2^{-24}\\) relative). The IEEE special-case overlay (stages
+4–5) then runs **once on the full-width f32 vectors**
+(`pow_special_cases_ps`) instead of twice on the promoted f64 halves —
+the cascade is pure mask logic, so halving its width halves its cost.
+
 ## 5. Argument reduction (input decomposition)
 
 Pow has *two* inputs to inspect:
 
 - **Magnitude of \\(x\\)**: the work piece for `ln`. Subnormal \\(x\\) is
   scaled by \\(2^{52}\\) before the IEEE 754 exponent extraction; the
-  scaling is later undone in \\(k\\).
+  scaling is later undone in \\(k\\). (f64 path only — the f32 path skips
+  this entirely, since any f32 value promoted to f64 is normal.)
 - **Integer-ness and parity of \\(y\\)**: classify \\(y\\) as
   `not-integer / even-integer / odd-integer` to drive the special-case
-  table. Done with `_mm256_round_pd::<{ TO_NEAREST }>` and a comparison
+  table. Done with truncation (`_mm256_round_pd::<TRUNC>`) and a comparison
   against the original \\(y\\):
 
   ```rust,ignore
@@ -121,8 +143,11 @@ table) is `andnot(y_is_odd_int, y_is_integer)` ∪ `not y_is_integer`.
 of `ln` and `exp` (see [Sec. 6 of the `ln` chapter](./ln.md#6-polynomial--kernel-approximation)
 and [Sec. 6 of the `exp` chapter](./exp.md#6-polynomial--kernel-approximation)).
 
-The crucial detail is that the `ln` polynomial is evaluated in *hi/lo*
-form. Where the standalone `ln` returns
+The crucial detail — **on the f64 path** — is that the `ln` polynomial is
+evaluated in *hi/lo* form. (The f32 path uses the same polynomial but keeps
+only the plain `hi` reconstruction, and swaps the divided Padé `exp` form
+for a division-free Taylor polynomial; see §4 and §8.) Where the standalone
+`ln` returns
 
 \\[
 \widehat{\ln x} \\;=\\; k\cdot\mathtt{LN2\\_HI} - ((\mathrm{hfsq} - (s(\mathrm{hfsq}+R)+k\cdot\mathtt{LN2\\_LO})) - f),
@@ -133,10 +158,18 @@ the rounding residual of the final subtraction is captured in the lo
 component:
 
 ```rust,ignore
-let core = /* the bracketed quantity above */;
-let hi   = _mm256_sub_pd(k_ln2hi, core);
-let err  = _mm256_sub_pd(_mm256_sub_pd(k_ln2hi, hi), core); // 2Sum residual
-let lo   = err;                                              // up to ~15 extra bits
+// val_hi = f - hfsq (may round); val_lo recovers its rounding error and
+// accumulates the small terms s*(hfsq+R) + k*ln2_lo.
+let val_hi = _mm256_sub_pd(f, hfsq);
+let val_lo = /* (f - val_hi) - hfsq + s*(hfsq+R) + k*ln2_lo */;
+
+// Knuth 2Sum on the *addition* val_hi + k*ln2_hi:
+let hi     = _mm256_add_pd(val_hi, k_ln2_hi);
+let b_virt = _mm256_sub_pd(hi, val_hi);
+let a_virt = _mm256_sub_pd(hi, b_virt);
+let b_err  = _mm256_sub_pd(k_ln2_hi, b_virt);
+let a_err  = _mm256_sub_pd(val_hi, a_virt);
+let lo     = _mm256_add_pd(_mm256_add_pd(a_err, b_err), val_lo);
 ```
 
 The same `LN2_HI / LN2_LO` and `LG1..LG7` constants from
@@ -193,16 +226,21 @@ let result        = _mm256_blendv_pd(result, _mm256_xor_pd(result, sign_bit), sh
 
 | aspect              | f32                                       | f64        |
 |---------------------|-------------------------------------------|------------|
-| internal precision  | f64 (8-lane f32 split into 2× f64 halves) | native f64 |
-| ln/exp constants    | shared with [`ln`](./ln.md) / [`exp`](./exp.md) | shared |
-| compensated arithmetic | always (Dekker product + 2Sum split)   | always     |
+| internal precision  | f64 (f32 lanes split into 2× f64 halves)  | native f64 |
+| compensated arithmetic | **none** (`pow_raw_f64::<false>`: plain ln → mul → exp) | Dekker product + 2Sum split |
+| exp kernel          | division-free degree-10 Taylor (even/odd split in \\(r^2\\)) | fdlibm Padé form (one `vdivpd`) |
+| subnormal pre-scaling | skipped (promoted f32 is never f64-subnormal) | yes |
+| special-case overlay | once, on the full-width f32 vectors      | on the f64 vectors |
 | ULP                 | \\(\le 2\\)                                   | \\(\le 2\\)    |
 
-f32 promotion is essential here: a pure-f32 chain through `ln_f32` then
+f32 *promotion* is essential here: a pure-f32 chain through `ln_f32` then
 `y * ln_f32` then `exp_f32` would amplify the 2 ULP error of each step
 by \\(|y|\\), giving wildly inaccurate results for moderate-magnitude
 exponents. Promoting to f64 buys 29 extra mantissa bits of headroom — far
-more than \\(|y|\\) can spend.
+more than \\(|y|\\) can spend. But f32 *compensation* is overkill: plain f64
+arithmetic already lands \\(\sim 2^{21}\\) times below half an f32 ULP (see
+§4), so the f32 path drops the double-double machinery and pockets the
+speed.
 
 ## 9. Per-backend differences (AVX2 / AVX-512 / NEON)
 
@@ -253,33 +291,36 @@ overflow.
 
 ## 11. Code excerpt
 
-From [`src/arch/avx2/pow.rs`][src-avx2] — Dekker product + compensated
-exp prologue:
+From [`src/arch/avx2/math/pow.rs`][src-avx2] — the raw kernel, generic over the
+precision mode. `pow_core_f64` (the f64 entry) instantiates
+`pow_raw_f64::<true>`; `_mm256_pow_ps` instantiates `pow_raw_f64::<false>`
+on each promoted half and finishes with `pow_special_cases_ps` on the
+full-width f32 vectors:
 
 ```rust,ignore
-// Stage 1: ln(|x|) as (hi, lo)
-let abs_x = _mm256_andnot_pd(_mm256_set1_pd(-0.0), x);
-let (ln_hi, ln_lo) = ln_hilo(abs_x);
+unsafe fn pow_raw_f64<const PRECISE: bool>(x_abs: __m256d, y: __m256d) -> __m256d {
+    // Stage 1: ln(|x|) — (hi, lo) pair when PRECISE, (hi, 0) otherwise
+    let (ln_hi, ln_lo) = ln_hilo::<PRECISE>(x_abs);
 
-// Stage 2: Dekker product  e_hi + e_lo = y * (ln_hi + ln_lo)
-let e_hi    = _mm256_mul_pd(y, ln_hi);
-let e_lo    = _mm256_fmadd_pd(y, ln_hi, _mm256_sub_pd(_mm256_setzero_pd(), e_hi));
-let e_lo    = _mm256_fmadd_pd(y, ln_lo, e_lo);
-
-// Stage 3: range-reduce e_hi by ln(2), then fold e_lo into r
-let k_f64   = _mm256_round_pd::<{ _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC }>(
-              _mm256_fmadd_pd(e_hi, _mm256_set1_pd(LN2_INV_64),
-                              _mm256_or_pd(_mm256_set1_pd(0.5),
-                                           _mm256_and_pd(e_hi, _mm256_set1_pd(-0.0)))));
-let r       = _mm256_fnmadd_pd(k_f64, _mm256_set1_pd(EXP_LN2_LO),
-              _mm256_fnmadd_pd(k_f64, _mm256_set1_pd(EXP_LN2_HI), e_hi));
-let r       = _mm256_add_pd(r, e_lo); // *** the compensation ***
-
-// Stage 4: standard exp polynomial on r, then 2^k scaling (as in exp chapter)
+    if PRECISE {
+        // Stage 2: Dekker product  e_hi + e_lo = y * (ln_hi + ln_lo)
+        let e_hi = _mm256_mul_pd(y, ln_hi);
+        let e_lo = _mm256_fmadd_pd(y, ln_lo, _mm256_fmsub_pd(y, ln_hi, e_hi));
+        // Stage 3: exp reduction folds e_lo into r before the polynomial
+        exp_compensated::<true>(e_hi, e_lo)
+    } else {
+        // f32 mode: one plain product, no compensation tail
+        exp_compensated::<false>(_mm256_mul_pd(y, ln_hi), ln_lo)
+    }
+}
 ```
 
-The full file is just over 1100 lines; the bulk of it is the special-case
-mask construction.
+Inside `exp_compensated::<true>`, the reduction remainder picks up the
+tail — `let r = _mm256_add_pd(r, e_lo);` — before the Padé polynomial;
+the `<false>` instantiation skips that add and evaluates a division-free
+degree-10 Taylor polynomial instead. The bulk of the file is the
+special-case mask construction, which exists twice: once in f64
+(`pow_core_f64`, phase 3) and once in f32 (`pow_special_cases_ps`).
 
 ## 12. References
 
@@ -289,7 +330,7 @@ mask construction.
 - Dekker, T. J., *A floating-point technique for extending the available precision*, Numer. Math. 18, 1971 — original double-double product.
 - Markstein, *IA-64 and Elementary Functions*, Prentice-Hall 2000, chapter 11 — compensated `pow` derivation.
 - Muller et al., *Handbook of Floating-Point Arithmetic*, 2nd ed., §11.5.
-- Repo source: [`src/arch/avx2/pow.rs`][src-avx2], [`src/arch/avx512/pow.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/pow.rs), [`src/arch/neon/pow.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/pow.rs).
+- Repo source: [`src/arch/avx2/math/pow.rs`][src-avx2], [`src/arch/avx512/math/pow.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math/pow.rs), [`src/arch/neon/math/pow.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/pow.rs).
 
 ## See also
 

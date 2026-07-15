@@ -2,10 +2,10 @@
 
 The natural exponential \\(\exp(x) = e^x\\) is computed by the classical
 *range-reduction → polynomial → reconstruction* pipeline of fdlibm,
-ported in the file [`src/arch/avx2/exp.rs`][src-avx2] (and its AVX-512 /
+ported in the file [`src/arch/avx2/math/exp.rs`][src-avx2] (and its AVX-512 /
 NEON twins).
 
-[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/exp.rs
+[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/exp.rs
 
 ## 1. Mathematical definition
 
@@ -33,8 +33,10 @@ the *useful* domain is bounded by the dynamic range of the result type:
 The exact f64 thresholds live in [`src/arch/consts/exp.rs`][src-consts]:
 
 ```rust,ignore
-pub const OVERFLOW_THRESH_64:  f64 = 7.097_827_128_933_839_731e+02;
-pub const UNDERFLOW_THRESH_64: f64 = -7.451_332_191_019_411_084e+02;
+/// = 7.09782712893383973096e+02, the largest x with exp(x) finite
+pub const OVERFLOW_THRESH_64: f64 = f64::from_bits(0x40862E42FEFA39EF);
+/// = -7.45133219101941108420e+02, below which exp(x) underflows to 0
+pub const UNDERFLOW_THRESH_64: f64 = f64::from_bits(0xC0874910D52D3051);
 ```
 
 [src-consts]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/consts/exp.rs
@@ -51,11 +53,16 @@ pub const UNDERFLOW_THRESH_64: f64 = -7.451_332_191_019_411_084e+02;
 | \\(x > \\) overflow threshold | \\(+\infty\\) (overflow)         |
 | \\(x < \\) underflow threshold | \\(+0.0\\) (gradual underflow) |
 
-These are produced branchlessly by `_mm256_blendv_pd` between the generic
-result and the precomputed special constants, in the order
+These are produced branchlessly with `_mm256_blendv_pd`. The \\(\pm\infty\\)
+rows need no compares of their own — \\(+\infty\\) already exceeds the
+overflow threshold and \\(-\infty\\) already undershoots the underflow
+threshold — so only three masks exist. Overflow and underflow are disjoint,
+which lets their two blends collapse into one: a combined
+`overflow | underflow` mask selects a pre-blended `+∞`/`+0` value, and a
+final blend applies NaN:
 
 ```text
-NaN  →  +∞  →  -∞  →  overflow  →  underflow  →  generic
+generic  →  (overflow | underflow → ±special)  →  NaN
 ```
 
 ## 4. Algorithm overview
@@ -89,9 +96,12 @@ the exact value than either summand alone. From
 [`src/arch/consts/exp.rs`][src-consts]:
 
 ```rust,ignore
-pub const LN2_HI_64:  f64 = 6.931_471_803_691_238_165e-01; // 33 leading bits, low bits zero
-pub const LN2_LO_64:  f64 = 1.908_214_929_270_585_002e-10; // residual
-pub const LN2_INV_64: f64 = 1.442_695_040_888_963_387e+00; // 1/ln(2) = log2(e)
+/// = 6.93147180369123816490e-01 (33 leading bits, low bits zero)
+pub const LN2_HI_64: f64 = f64::from_bits(0x3FE62E42FEE00000);
+/// = 1.90821492927058500170e-10 (residual)
+pub const LN2_LO_64: f64 = f64::from_bits(0x3DEA39EF35793C76);
+/// = 1.44269504088896338700e+00 (1/ln 2 = log2 e)
+pub const LN2_INV_64: f64 = f64::from_bits(0x3FF71547652B82FE);
 ```
 
 `LN2_HI_64` is rounded to 33 bits (its low 20 mantissa bits are zero), so
@@ -167,10 +177,12 @@ let scale     = _mm256_castsi256_pd(_mm256_add_epi64(k_shifted, one_bits));
 let result    = _mm256_mul_pd(exp_r, scale);
 ```
 
-For very large or very small \\(k\\), the exponent field can saturate; the
-implementation guards this with the precomputed
-`OVERFLOW_THRESH_64` / `UNDERFLOW_THRESH_64` masks computed *before* the
-construction, so the saturating path never executes the bit trick.
+For very large or very small \\(k\\), the exponent field can saturate. The
+bit trick itself runs branch-free on every lane; the
+`OVERFLOW_THRESH_64` / `UNDERFLOW_THRESH_64` masks are computed up front
+and the saturated results (\\(+\\infty\\) / \\(0\\)) are blended over the
+garbage lanes afterwards, so the trick's output for out-of-range inputs is
+never observed.
 
 ## 8. Per-precision differences (f32 vs f64)
 
@@ -192,8 +204,8 @@ separate f32 polynomial and constant set.
 | backend  | f32 lanes | f64 lanes | round-to-nearest                  |
 |----------|-----------|-----------|-----------------------------------|
 | AVX2     | 8 (via 2× f64) | 4   | `_mm256_round_pd` w/ truncation + copysign-0.5 |
-| AVX-512  | 16 (via 2× f64) | 8 | `_mm512_roundscale_pd` (direct round-to-nearest) |
-| NEON     | 4 (via 2× f64) | 2  | `vrndnq_f64`                      |
+| AVX-512  | 16 (via 2× f64) | 8 | `_mm512_roundscale_pd` w/ truncation + copysign-0.5 |
+| NEON     | 4 (via 2× f64) | 2  | `vrndq_f64` (truncation) + copysign-0.5 |
 
 The AVX-512 backend can use mask registers directly, avoiding the
 `blendv` chain; instead of computing all special-case results
@@ -233,7 +245,7 @@ construction begins to interact with the polynomial-derived mantissa.
 
 ## 11. Code excerpt
 
-From [`src/arch/avx2/exp.rs`][src-avx2] (the core kernel, abridged):
+From [`src/arch/avx2/math/exp.rs`][src-avx2] (the core kernel, abridged):
 
 ```rust,ignore
 // Step 1: range reduction
@@ -269,7 +281,7 @@ let result    = _mm256_mul_pd(exp_r, scale);
 - Tang, P. T. P., *Table-driven implementation of the exponential function in IEEE floating-point arithmetic*, ACM TOMS 15(2), 1989.
 - Muller et al., *Handbook of Floating-Point Arithmetic*, 2nd ed., chapter 12 (elementary-function reduction-and-reconstruction recipes).
 - Cody & Waite, *Software Manual for the Elementary Functions*, Prentice-Hall 1980 — the original source of the hi/lo \\(\ln 2\\) split.
-- Repo source: [`src/arch/avx2/exp.rs`][src-avx2], [`src/arch/avx512/exp.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/exp.rs), [`src/arch/neon/exp.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/exp.rs), [`src/arch/consts/exp.rs`][src-consts].
+- Repo source: [`src/arch/avx2/math/exp.rs`][src-avx2], [`src/arch/avx512/math/exp.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math/exp.rs), [`src/arch/neon/math/exp.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/exp.rs), [`src/arch/consts/exp.rs`][src-consts].
 
 ## See also
 

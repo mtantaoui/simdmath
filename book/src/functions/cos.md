@@ -28,7 +28,7 @@ Cosine is **even**, **\\(2\pi\\)-periodic**, and analytic on \\(\mathbb{R}\\).
 | `+∞`            | `NaN`  | C99 Sec. F.10.1.5 |
 | `-∞`            | `NaN`  | C99 Sec. F.10.1.5 |
 | `NaN`           | `NaN`  | IEEE 754-2008 |
-| \\(\lvert x\rvert < 2^{-27}\sqrt 2\\) (f64) | `1.0` | tiny-arg shortcut |
+| \\(\lvert x\rvert\\) tiny | `1.0` | falls out of the kernel: \\(1 - x^2/2\\) rounds to 1 (no special branch) |
 
 ## 4. Algorithm overview
 
@@ -122,13 +122,16 @@ than the f32 mantissa headroom.
 
 ## 9. Per-backend differences
 
-| Backend  | f32 lanes | f64 lanes | Selection idiom            |
-|----------|-----------|-----------|-----------------------------|
-| AVX2     | 8         | 4         | `_mm256_blendv_pd`          |
-| AVX-512  | 16        | 8         | `_mm512_mask_blend_pd`      |
-| NEON     | 4         | 2         | `vbslq_f64(mask, t, f)`     |
+| Backend  | f32 lanes | f64 lanes | Quadrant-mask idiom                          |
+|----------|-----------|-----------|----------------------------------------------|
+| AVX2     | 8         | 4         | sign-bit shifts + `_mm256_blendv_pd` / `xor` |
+| AVX-512  | 16        | 8         | `_mm512_test_epi64_mask` + `_mm512_mask_xor_pd` |
+| NEON     | 4         | 2         | `vtstq_s64` + `vbslq_f64` / masked `veor`    |
 
-See [AVX2](../backends/avx2.md), [AVX-512](../backends/avx512.md), and
+The AVX-512 path tests the quadrant bits straight into an opmask
+(`vptestm`, one instruction per mask) and applies the negation with a
+single masked xor; NEON uses `vtst` for the masks. See
+[AVX2](../backends/avx2.md), [AVX-512](../backends/avx512.md), and
 [NEON](../backends/neon.md) for backend-specific details.
 
 ## 10. Error analysis
@@ -162,18 +165,21 @@ The cos f64 quadrant-decode portion (compare with the sin variant):
 
 ```rust,ignore
 // n mod 4: 0→cos(y), 1→-sin(y), 2→-cos(y), 3→sin(y)
-let n_and_1 = _mm256_and_si256(n_256, one);   // bit 0: use sin kernel
-let n_plus_1 = _mm256_add_epi64(n_256, one);  // shift quadrant by 1
-let n_p1_and_2 = _mm256_and_si256(n_plus_1, two);
+//
+// `blendv` only reads the sign bit of its mask, so bit 0 of n (use the
+// sin kernel) and bit 1 of n+1 (negate) are shifted straight into bit 63
+// — no and+cmpeq pair — and the conditional negation is a single xor
+// with the sign bit isolated under the negate mask.
+let n_plus_1 = _mm256_add_epi64(n_256, _mm256_set1_epi64x(1));
 
-let use_sin = _mm256_cmpeq_epi64(n_and_1, one);
-let negate  = _mm256_cmpeq_epi64(n_p1_and_2, two);
+let use_sin  = _mm256_castsi256_pd(_mm256_slli_epi64(n_256, 63));
+let neg_sign = _mm256_and_pd(
+    _mm256_castsi256_pd(_mm256_slli_epi64(n_plus_1, 62)),
+    _mm256_set1_pd(-0.0),
+);
 
-let kernel_result = _mm256_blendv_pd(cos_y, sin_y, _mm256_castsi256_pd(use_sin));
-let negated       = _mm256_xor_pd(kernel_result, _mm256_set1_pd(-0.0));
-let result        = _mm256_blendv_pd(kernel_result,
-                                     negated,
-                                     _mm256_castsi256_pd(negate));
+let kernel_result = _mm256_blendv_pd(cos_y, sin_y, use_sin);
+let result        = _mm256_xor_pd(kernel_result, neg_sign);
 ```
 
 The shared kernel polynomials are the same `sin_kernel_f64` /

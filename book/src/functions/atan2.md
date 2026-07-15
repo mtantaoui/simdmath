@@ -63,10 +63,10 @@ and `PI_LO_64 ≈ 1.224_646_799e-16`.
 | any         | \\(\text{NaN}\\)| \\(\text{NaN}\\) |
 
 This is exactly the table reproduced verbatim in the doc comment of
-[`src/arch/avx2/atan2.rs`][src-avx2]. The `±` in the result follows
+[`src/arch/avx2/math/atan2.rs`][src-avx2]. The `±` in the result follows
 \\(\mathrm{sign}(y)\\) in every row.
 
-[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/atan2.rs
+[src-avx2]: https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx2/math/atan2.rs
 
 ## 4. Algorithm overview
 
@@ -154,7 +154,7 @@ parallel and selecting via `_mm256_blendv_*` / `vbslq_*`:
 Special-case overrides are then applied in priority order:
 
 ```text
-NaN  →  x == ±∞  →  y == 0  →  x == 0  →  huge ratio  →  generic
+NaN  →  y == 0  →  x == 0  →  x == ±∞  →  huge ratio  →  generic
 ```
 
 The order matters: e.g. `atan2(±∞, ±∞)` would otherwise be classified
@@ -219,24 +219,23 @@ error. f64 stays at \\(\le 2\\) ULP everywhere.
 
 ## 11. Code excerpt
 
-From [`src/arch/avx2/atan2.rs`][src-avx2]:
+From [`src/arch/avx2/math/atan2.rs`][src-avx2]:
 
 ```rust,ignore
+// |x|, |y| via an AND with the abs mask; sign bits via a logical shift.
+let ix = _mm256_and_si256(x_bits, abs_mask); // |x| as integer bits
+let iy = _mm256_and_si256(y_bits, abs_mask); // |y| as integer bits
+
 // Quadrant encoding: m = 2*sign(x) + sign(y)
-let sx = _mm256_and_si256(_mm256_castps_si256(x), _mm256_set1_epi32(0x80000000_u32 as i32));
-let sy = _mm256_and_si256(_mm256_castps_si256(y), _mm256_set1_epi32(0x80000000_u32 as i32));
+let sign_x = _mm256_srli_epi32(x_bits, 31); // 0 or 1
+let sign_y = _mm256_srli_epi32(y_bits, 31); // 0 or 1
+let m = _mm256_or_si256(_mm256_slli_epi32(sign_x, 1), sign_y);
 
-// |y| / |x|
-let ax = _mm256_andnot_ps(_mm256_castsi256_ps(_mm256_set1_epi32(0x80000000_u32 as i32)), x);
-let ay = _mm256_andnot_ps(_mm256_castsi256_ps(_mm256_set1_epi32(0x80000000_u32 as i32)), y);
-let alpha = _mm256_atan_ps(_mm256_div_ps(ay, ax));
-
-// Four branchless quadrant results
-let pi_hi = _mm256_set1_ps(PI_HI_32);
-let pi_lo = _mm256_set1_ps(PI_LO_32);
+// Per-quadrant results from the |y|/|x| arctangent (condensed; the source
+// names these result_m0..result_m3):
 let q2 = _mm256_add_ps(_mm256_sub_ps(pi_hi, alpha), pi_lo); // π - α
 let q3 = _mm256_sub_ps(_mm256_sub_ps(alpha, pi_hi), pi_lo); // α - π
-// Sign restoration via XOR with sx, sy as appropriate; full code is in the file.
+// ... blended by m, then special-case overrides; full code is in the file.
 ```
 
 The NEON variant differs only in the intrinsics used (`vsubq_f32`,
@@ -248,7 +247,7 @@ The NEON variant differs only in the intrinsics used (`vsubq_f32`,
 - IEEE 754-2008, §9.2.1: recommended operations, including the special-value table for `atan2`.
 - ISO/IEC 9899:2018 (C18), §F.10.1.4: same special-value table.
 - Muller et al., *Handbook of Floating-Point Arithmetic*, 2nd ed., §11.4.2: argument-reduction techniques for inverse trigonometry.
-- Repo source: [`src/arch/avx2/atan2.rs`][src-avx2], [`src/arch/avx512/atan2.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/atan2.rs), [`src/arch/neon/atan2.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/atan2.rs), [`src/arch/consts/atan2.rs`][src-consts].
+- Repo source: [`src/arch/avx2/math/atan2.rs`][src-avx2], [`src/arch/avx512/math/atan2.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/avx512/math/atan2.rs), [`src/arch/neon/math/atan2.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/neon/math/atan2.rs), [`src/arch/consts/atan2.rs`][src-consts].
 
 ## See also
 

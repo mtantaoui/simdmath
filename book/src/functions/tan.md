@@ -3,7 +3,7 @@
 This chapter documents `tan(x)`. Like sin and cos it begins with a
 Cody-Waite reduction to \\([-\pi/4, \pi/4]\\), but the reconstruction step
 swaps `tan` with \\(-1/\tan\\) — i.e. with the cotangent — for odd quadrants.
-The underlying kernel is a rational approximation of \\(\tan(y)/y\\).
+The underlying kernel is an odd polynomial approximation of \\(\tan(y)\\).
 
 ## 1. Mathematical definition
 
@@ -63,7 +63,7 @@ Identical to sin/cos. The constants come from
 
 ### f32 kernel (`__tandf`)
 
-Approximates \\(\tan(y)/y\\) on \\([-\pi/4, \pi/4]\\) as a degree-12 polynomial
+Approximates \\(\tan(y)\\) on \\([-\pi/4, \pi/4]\\) as a degree-13 polynomial
 in \\(y\\):
 
 \\[
@@ -85,7 +85,8 @@ promote/demote pattern as sin/cos).
 
 ### f64 kernel (`__tan`)
 
-A degree-26 polynomial in \\(y^2\\) — the longest kernel in this crate:
+A degree-27 polynomial in \\(y\\) (degree 12 in \\(y^2\\) inside the
+\\(y + y^3 P(y^2)\\) form) — the longest kernel in this crate:
 
 \\[
 \hat\tan(y) \\;\approx\\; y + y^3 \cdot P(y^2)
@@ -111,11 +112,19 @@ Beyond the simple Taylor coefficients (\\(1/3, 2/15, 17/315, …\\)), the
 higher terms are **minimax-optimised** rather than analytical, so a few
 of them have unexpected signs.
 
-Around \\(|y| \to \pi/4\\) a "big-argument" branch in musl's `__tan.c` uses
-\\(\tan(y) = (y - \pi/4) / (y \cdot \tan(\pi/4) + \cos(y) / (\sin(y) \cdot
-\tan(\pi/4 - y)))\\) to compensate for cancellation; the SIMD port mirrors
-this branch with `BIG_THRESH_64 = 0.6743...` from
-[`arch/consts/tan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/consts/tan.rs).
+Around \\(|y| \to \pi/4\\) the direct polynomial degrades: \\(\tan\\) and its
+derivatives grow quickly toward the interval edge, so the
+\\(y + y^3 P(y^2)\\) form would need a much higher degree to hold the error
+budget there, and the downstream \\(-1/\tan(y)\\) reciprocal amplifies
+whatever error remains. musl's `__tan.c` therefore switches to a
+"big-argument" branch that re-expresses the result through the *reflected*
+argument \\(\pi/4 - |y|\\) — small again, where the polynomial is at its
+best — and reconstructs via a guarded identity that dodges the
+cancellation. The crossover point, `BIG_THRESH_64 = 0.6743...` (about
+\\(0.86 \cdot \pi/4\\)) from
+[`arch/consts/tan.rs`](https://github.com/mtantaoui/simdmath/blob/main/src/arch/consts/tan.rs),
+is musl's empirically chosen boundary between the two regimes, and the
+SIMD port mirrors it verbatim.
 
 ## 7. Reconstruction
 
@@ -145,7 +154,7 @@ correspondingly large.
 | Aspect             | f32                              | f64                             |
 |--------------------|----------------------------------|---------------------------------|
 | Internal precision | computed in f64 (promote/demote) | native f64                      |
-| Kernel degree      | 12 (in \\(y\\))                      | 26 (in \\(y^2\\))                   |
+| Kernel degree      | 13 (in \\(y\\))                      | 27 (in \\(y\\); 12 in \\(y^2\\))     |
 | Cody-Waite         | 25-bit `PIO2_1`                  | 33-bit `PIO2_1` + `PIO2_2`      |
 | Worst-case ULP     | ≤ 2                              | ≤ 2                             |
 
@@ -207,11 +216,14 @@ pub(crate) unsafe fn _mm256_tan_ps(x: __m256) -> __m256 {
 The cotangent flip on odd quadrants:
 
 ```rust,ignore
-let n_and_1   = _mm256_and_si256(n_256, _mm256_set1_epi64x(1));
-let n_is_odd  = _mm256_cmpeq_epi64(n_and_1, _mm256_set1_epi64x(1));
+// `blendv` only reads the sign bit of the mask, so shifting bit 0 of n
+// straight into bit 63 replaces an and+cmpeq pair.
+let n_256  = _mm256_cvtepi32_epi64(n);
+let is_odd = _mm256_castsi256_pd(_mm256_slli_epi64(n_256, 63));
 
-let neg_recip = _mm256_div_pd(_mm256_set1_pd(-1.0), tan_y);
-_mm256_blendv_pd(tan_y, neg_recip, _mm256_castsi256_pd(n_is_odd))
+let neg_one = _mm256_set1_pd(-1.0);
+let recip   = _mm256_div_pd(neg_one, tan_y);
+let result  = _mm256_blendv_pd(tan_y, recip, is_odd);
 ```
 
 ## 12. References

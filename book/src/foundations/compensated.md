@@ -6,10 +6,10 @@ collection of tricks that *recover* that lost rounding as a second, smaller
 floating-point number, so that the pair \\((s_\text{hi}, s_\text{lo})\\)
 together represents twice the working precision.
 
-`simdmath` uses these techniques sparingly but crucially: the tail of `pow`,
-the high-precision split of \\(\pi/2\\) in trig argument reduction, and the
-double-double multiplications inside `cbrt` all rely on the algorithms in
-this chapter.
+`simdmath` uses these techniques sparingly but crucially: the compensated
+`ln`/`exp` pipeline of `pow` (Knuth 2Sum plus a Dekker product) and the
+high-precision hi/lo splits of \\(\pi/2\\) and \\(\ln 2\\) in argument
+reduction all rely on the algorithms in this chapter.
 
 ## TwoSum: exact addition
 
@@ -128,10 +128,19 @@ fn two_prod_fma(a: f64, b: f64) -> (f64, f64) {
 }
 ```
 
-Three operations instead of seventeen. `simdmath` uses
-`two_prod_fma` everywhere — the AVX2/AVX-512 backends call
-`_mm256_fmadd_pd(a, b, _mm256_xor_pd(p, signmask))` and the NEON
-backend calls `vfmaq_f64(neg_p, a, b)`.
+Three operations instead of seventeen. This is exactly how `pow`'s
+Dekker product is spelled in the AVX2 backend
+(`src/arch/avx2/math/pow.rs`):
+
+```rust,ignore
+let ehi = _mm256_mul_pd(y, ln_hi);
+let elo = _mm256_fmadd_pd(y, ln_lo, _mm256_fmsub_pd(y, ln_hi, ehi));
+//                                  ^^^^^^^^^^^^^^^ y*ln_hi − ehi = the FMA error term
+```
+
+(the `a·b − p` error term is a single `fmsub`; NEON spells the same term
+`vfmaq_f64(vnegq_f64(ehi), y, ln_hi)` — accumulator-first FMA with the
+product negated via the accumulator).
 
 ## Double-double arithmetic
 
@@ -182,18 +191,23 @@ y \in [-1024, 1024]\\).
 In [Argument-reduction taxonomy](./argument_reduction.md) we will see that
 reducing \\(\hat x \mod \pi/2\\) requires representing \\(\pi/2\\) to *more* than
 `f64` precision. The Cody-Waite trick is just a manual application of
-TwoSum-style cancellation: split \\(\pi/2 = c_1 + c_2 + c_3\\) where \\(c_1\\) has
-17 zero trailing bits, \\(c_2\\) has 30 zero trailing bits, and the residual
-\\(c_3\\) captures the rest. Subtracting \\(k c_1\\), \\(k c_2\\), \\(k c_3\\) in
-descending order of magnitude is equivalent to a hand-unrolled DD subtract.
+TwoSum-style cancellation: represent \\(\pi/2\\) as a ladder of constants in
+descending magnitude where each "hi" chunk ends in a run of zero bits (so
+\\(k \cdot c_i\\) is exact) and a full-precision tail captures the rest. The
+crate uses musl's four-constant ladder
+`PIO2_1 / PIO2_1T / PIO2_2 / PIO2_2T` (see the worked numerics in the
+argument-reduction chapter); subtracting the \\(k c_i\\) terms in descending
+order of magnitude is equivalent to a hand-unrolled DD subtract.
 
-### `cbrt` and `sqrt` correction step
+### `cbrt`'s exact-squaring trick
 
-Both root functions perform one Newton iteration in DD precision to convert
-a Halley- or Newton-quality starting estimate (≈ 28 bits of precision)
-into a final ≤ 0.5 ULP result. The DD multiply-and-add inside the iteration
-is the hot loop; it amortises four FMAs per element and is the reason
-`simdmath`'s `cbrt` is competitive with `vcbrtps` from Intel SVML.
+`cbrt` needs no double-double arithmetic at all, but its final f64 Newton
+step leans on the same "make it exact" philosophy: the ~23-bit estimate
+`t` is first rounded to 23 significant bits by a bit mask, so that the
+`t * t` inside the Newton correction is *exactly* representable and the
+step's only rounding comes from the final division. (`sqrt` needs no
+correction of any kind — it is a single correctly-rounded hardware
+instruction on every backend.)
 
 ## Vectorisation notes
 

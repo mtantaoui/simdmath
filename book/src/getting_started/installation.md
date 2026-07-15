@@ -6,7 +6,8 @@ on each target architecture, and a short troubleshooting guide.
 
 ## Minimum supported Rust version (MSRV)
 
-`simdmath` requires **Rust 1.85** or newer. The MSRV is driven by:
+`simdmath` requires **Rust 1.89** or newer (the `rust-version` field in
+`Cargo.toml` is authoritative). The MSRV is driven by:
 
 - stabilised portable SIMD intrinsics (`std::arch::x86_64::*` for AVX2 / AVX-512
   and `std::arch::aarch64::*` for NEON);
@@ -77,12 +78,11 @@ AVX-512 is available on Intel Skylake-X and newer Xeons, Ice Lake / Tiger Lake
 client parts, and AMD Zen 4:
 
 ```bash
-RUSTFLAGS="-C target-feature=+avx512f,+avx512dq,+avx512vl,+avx512bw" \
-  cargo build --release
+RUSTFLAGS="-C target-feature=+avx512f" cargo build --release
 ```
 
-The four extensions form the *AVX-512 baseline* required by `simdmath`'s
-16-lane f32 and 8-lane f64 kernels; see
+The foundation extension `avx512f` is the only one `simdmath`'s 16-lane f32
+and 8-lane f64 kernels require (FMA is part of AVX-512F itself); see
 [Required CPU features](./cpu_features.md).
 
 ### aarch64 with NEON
